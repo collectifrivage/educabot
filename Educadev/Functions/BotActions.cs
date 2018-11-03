@@ -109,10 +109,13 @@ namespace Educadev.Functions
                 PartitionKey = proposalPayload.PartitionKey,
                 RowKey = proposalPayload.ActionTimestamp,
 
+                ProposedBy = proposalPayload.User.Id,
+                Team = proposalPayload.Team.Id,
+                Channel = proposalPayload.Channel.Id,
+
                 Name = proposalPayload.GetValue("name"),
                 Url = proposalPayload.GetValue("url"),
-                Notes = proposalPayload.GetValue("notes"),
-                ProposedBy = proposalPayload.User.Id
+                Notes = proposalPayload.GetValue("notes")
             };
 
             await proposals.AddAsync(proposal);
@@ -137,6 +140,9 @@ namespace Educadev.Functions
             var plan = new Plan {
                 PartitionKey = planPayload.PartitionKey,
                 RowKey = planPayload.ActionTimestamp,
+                CreatedBy = planPayload.User.Id,
+                Team = planPayload.Team.Id,
+                Channel = planPayload.Channel.Id,
                 Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces),
                 Owner = planPayload.GetValue("owner"),
                 Video = planPayload.GetValue("video")
