@@ -46,7 +46,7 @@ namespace Educadev.Functions
                 }
                 else if (dsp.CallbackId == "plan")
                 {
-                    var result = ValidatePlan(dsp);
+                    var result = await ValidatePlan(binder, dsp);
                     if (!result.Valid) return Utils.Ok(result);
 
                     return await RecordPlan(binder, dsp);
@@ -78,19 +78,31 @@ namespace Educadev.Functions
             return response;
         }
 
-        private static SlackErrorsResponse ValidatePlan(DialogSubmissionPayload dsp)
+        private static async Task<SlackErrorsResponse> ValidatePlan(IBinder binder, DialogSubmissionPayload dsp)
         {
             var response = new SlackErrorsResponse();
             var now = DateTime.Now;
-
-            if (!DateTime.TryParseExact(dsp.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var date))
+            
+            if (!DateTime.TryParseExact(dsp.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal, out var date))
                 response.AddError("date", "Le format de date n'est pas valide.");
             else if (date < now.Date)
                 response.AddError("date", "La date ne peut pas être dans le passé.");
             else if (now.TimeOfDay > TimeSpan.Parse("12:00") && date == now.Date)
                 response.AddError("date", "Comme il est passé midi, la date ne peut pas être aujourd'hui.");
-
+            
             if (!response.Valid) return response;
+
+            var plansTable = await binder.GetTable("plans");
+            var query = new TableQuery<Plan>().Where(TableQuery.CombineFilters(
+                TableQuery.GenerateFilterCondition("PartitionKey", "eq", dsp.PartitionKey),
+                "and",
+                TableQuery.GenerateFilterConditionForDate("Date", "eq", date)
+            ));
+            var plans = await plansTable.ExecuteQueryAsync(query);
+            if (plans.Any())
+            {
+                response.AddError("date", "Un Lunch & Watch est déjà prévu pour cette date.");
+            }
 
             if (date == now.Date)
             {
@@ -176,7 +188,7 @@ namespace Educadev.Functions
                 CreatedBy = planPayload.User.Id,
                 Team = planPayload.Team.Id,
                 Channel = planPayload.Channel.Id,
-                Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces),
+                Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal),
                 Owner = planPayload.GetValue("owner"),
                 Video = videoKey
             };
