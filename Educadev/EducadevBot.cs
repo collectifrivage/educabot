@@ -40,28 +40,27 @@ namespace Educadev
                     var result = ValidateProposal(dsp);
                     if (!result.Valid) return Ok(result);
 
-                    await binder.SendToQueue("proposals", JsonConvert.SerializeObject(dsp));
+                    await binder.SendToQueue("proposals", dsp);
                 }
                 else if (dsp.CallbackId == "plan")
                 {
                     var result = ValidatePlan(dsp);
                     if (!result.Valid) return Ok(result);
 
-                    await binder.SendToQueue("plans", JsonConvert.SerializeObject(dsp));
+                    await binder.SendToQueue("plans", dsp);
                 }
             }
             else if (payload is InteractiveMessagePayload imp)
             {
-                if (imp.CallbackId == "message_action" && imp.Actions.First().Name == "removeme")
+                switch (imp.CallbackId)
                 {
-                    return Ok(new SlackMessage {
-                        DeleteOriginal = true
-                    });
-                }
-
-                if (imp.CallbackId == "plan_action")
-                {
-                    await binder.SendToQueue("plan-actions", JsonConvert.SerializeObject(imp));
+                    case "message_action" when imp.Actions.First().Name == "removeme":
+                        return Ok(new SlackMessage {DeleteOriginal = true});
+                    case "plan_action":
+                        await binder.SendToQueue("plan-actions", imp);
+                        break;
+                    case "proposal_action":
+                        return await ProcessProposalAction(binder, imp);
                 }
             }
 
@@ -100,43 +99,9 @@ namespace Educadev
 
             var allProposals = await proposalsTable.GetAllByPartition<Proposal>(SlackHelper.GetPartitionKey(team, channel));
 
-            SlackMessage message;
-
-            if (allProposals.Any())
-            {
-                message = new SlackMessage {
-                    Text = $"Voici les propositions actuelles pour <#{channel}>:",
-                    Attachments = allProposals.Select(p => new MessageAttachment {
-                        AuthorName = $"Proposé par <@{p.ProposedBy}>",
-                        Title = $"<{p.Url}|{p.Name}>",
-                        Text = p.Notes
-                    }).ToList()
-                };
-            }
-            else
-            {
-                message = new SlackMessage {
-                    Text = $"Il n'y a aucune proposition pour le moment dans <#{channel}>."
-                };
-            }
-
-            message.Attachments.Add(GetRemoveMessageAttachment());
+            var message = GetListMessage(allProposals, channel);
 
             return Ok(message);
-        }
-
-        private static MessageAttachment GetRemoveMessageAttachment()
-        {
-            return new MessageAttachment {
-                CallbackId = "message_action",
-                Actions = new List<MessageAction> {
-                    new MessageAction {
-                        Type = "button",
-                        Text = "Fermer ce message",
-                        Name = "removeme"
-                    }
-                }
-            };
         }
 
         [FunctionName("SlackCommandPlan")]
@@ -261,6 +226,92 @@ namespace Educadev
             };
 
             await SlackHelper.SlackPost("chat.update", payload.Team.Id, message);
+        }
+
+        private static async Task<IActionResult> ProcessProposalAction(IBinder binder,
+            InteractiveMessagePayload payload)
+        {
+            var proposals = await binder.GetTable("proposals");
+            var action = payload.Actions.First();
+            var plan = await proposals.Retrieve<Proposal>(payload.PartitionKey, action.Value);
+
+            if (action.Name == "delete")
+            {
+                // TODO: Ajouter de la logique pour ne pas supprimer une proposition assignée à un plan
+                await proposals.ExecuteAsync(TableOperation.Delete(plan));
+                
+                // TODO: Notifier le owner si c'est pas lui qui supprime sa proposition
+                
+                // NOTE: Présentement la seule place qu'on peut supprimer une proposition c'est à partir de la liste de toutes les propositions.
+                // Si ça change, va falloir ajouter plus de logique ici pour recréer le bon type de message.
+                var allProposals = await proposals.GetAllByPartition<Proposal>(plan.PartitionKey);
+                var message = GetListMessage(allProposals, payload.Channel.Id);
+                message.ReplaceOriginal = true;
+                return Ok(message);
+            }
+
+            return Ok();
+        }
+
+        private static SlackMessage GetListMessage(IList<Proposal> allProposals, string channel)
+        {
+            SlackMessage message;
+
+            if (allProposals.Any())
+            {
+                message = new SlackMessage {
+                    Text = $"Voici les propositions actuelles pour <#{channel}>:",
+                    Attachments = allProposals.Select(GetProposalAttachment).ToList()
+                };
+            }
+            else
+            {
+                message = new SlackMessage {
+                    Text = $"Il n'y a aucune proposition pour le moment dans <#{channel}>."
+                };
+            }
+
+            message.Attachments.Add(GetRemoveMessageAttachment());
+            return message;
+        }
+
+        private static MessageAttachment GetProposalAttachment(Proposal p)
+        {
+            return new MessageAttachment {
+                AuthorName = $"Proposé par <@{p.ProposedBy}>",
+                Title = $"<{p.Url}|{p.Name}>",
+                Text = p.Notes,
+                CallbackId = "proposal_action",
+                Actions = new List<MessageAction> {
+                    new MessageAction {
+                        Type = "button",
+                        Name = "delete",
+                        Text = "Supprimer",
+                        Value = p.RowKey,
+                        Style = "danger",
+                        Confirm = new ActionConfirmation {
+                            Title = "Supprimer la proposition",
+                            Text = $"Voulez-vous vraiment supprimer la proposition \"{p.Name}\" ?",
+                            OkText = "Supprimer",
+                            DismissText = "Annuler"
+                        }
+                    }
+                }
+            };
+        }
+
+        private static MessageAttachment GetRemoveMessageAttachment()
+        {
+            return new MessageAttachment {
+                CallbackId = "message_action",
+                Actions = new List<MessageAction> {
+                    new MessageAction {
+                        Type = "button",
+                        Text = "Fermer ce message",
+                        Name = "removeme"
+                    }
+                }
+            };
         }
 
         private static async Task<IList<MessageAttachment>> GetPlanAttachments(IBinder binder, Plan plan)
