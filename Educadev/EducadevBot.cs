@@ -40,14 +40,14 @@ namespace Educadev
                     var result = ValidateProposal(dsp);
                     if (!result.Valid) return Ok(result);
 
-                    await binder.SendToQueue("proposals", dsp);
+                    await RecordProposal(binder, dsp);
                 }
                 else if (dsp.CallbackId == "plan")
                 {
                     var result = ValidatePlan(dsp);
                     if (!result.Valid) return Ok(result);
 
-                    await binder.SendToQueue("plans", dsp);
+                    await RecordPlan(binder, dsp);
                 }
             }
             else if (payload is InteractiveMessagePayload imp)
@@ -57,7 +57,7 @@ namespace Educadev
                     case "message_action" when imp.Actions.First().Name == "removeme":
                         return Ok(new SlackMessage {DeleteOriginal = true});
                     case "plan_action":
-                        await binder.SendToQueue("plan-actions", imp);
+                        await ProcessPlanAction(binder, imp);
                         break;
                     case "proposal_action":
                         return await ProcessProposalAction(binder, imp);
@@ -125,12 +125,10 @@ namespace Educadev
             return Ok();
         }
 
-        [FunctionName("RecordProposal")]
-        public static async Task RecordProposal(
-            [QueueTrigger("proposals")] DialogSubmissionPayload proposalPayload,
-            [Table("proposals")] IAsyncCollector<Proposal> proposals,
-            ILogger log)
+        private static async Task RecordProposal(IBinder binder, DialogSubmissionPayload proposalPayload)
         {
+            var proposals = await binder.GetTableCollector<Proposal>("proposals");
+
             var proposal = new Proposal {
                 PartitionKey = proposalPayload.PartitionKey,
                 RowKey = proposalPayload.ActionTimestamp,
@@ -156,12 +154,10 @@ namespace Educadev
             });
         }
 
-        [FunctionName("RecordPlan")]
-        public static async Task RecordPlan(
-            [QueueTrigger("plans")] DialogSubmissionPayload planPayload,
-            [Table("plans")] IAsyncCollector<Plan> plans,
-            ILogger log, IBinder binder)
+        private static async Task RecordPlan(IBinder binder, DialogSubmissionPayload planPayload)
         {
+            var plans = await binder.GetTableCollector<Plan>("plans");
+
             var plan = new Plan {
                 PartitionKey = planPayload.PartitionKey,
                 RowKey = planPayload.ActionTimestamp,
@@ -181,12 +177,10 @@ namespace Educadev
             await SlackHelper.SlackPost("chat.postMessage", planPayload.Team.Id, message);
         }
 
-        [FunctionName("ProcessPlanAction")]
-        public static async Task ProcessPlanAction(
-            [QueueTrigger("plan-actions")] InteractiveMessagePayload payload,
-            [Table("plans")] CloudTable plans,
-            ILogger log, IBinder binder)
+        private static async Task ProcessPlanAction(IBinder binder, InteractiveMessagePayload payload)
         {
+            var plans = await binder.GetTable("plans");
+
             var action = payload.Actions.First();
             var plan = await plans.Retrieve<Plan>(payload.PartitionKey, action.Value);
 
@@ -228,8 +222,7 @@ namespace Educadev
             await SlackHelper.SlackPost("chat.update", payload.Team.Id, message);
         }
 
-        private static async Task<IActionResult> ProcessProposalAction(IBinder binder,
-            InteractiveMessagePayload payload)
+        private static async Task<IActionResult> ProcessProposalAction(IBinder binder, InteractiveMessagePayload payload)
         {
             var proposals = await binder.GetTable("proposals");
             var action = payload.Actions.First();
