@@ -1,6 +1,6 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
-using System.Runtime.InteropServices.ComTypes;
 using System.Threading.Tasks;
 using Educadev.Helpers;
 using Educadev.Models.Slack.Dialogs;
@@ -17,6 +17,11 @@ namespace Educadev.Functions
 {
     public static class BotCommands
     {
+        static BotCommands()
+        {
+            CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
+        }
+
         [FunctionName("SlackCommandPropose")]
         public static async Task<IActionResult> OnPropose(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/propose")] HttpRequest req,
@@ -39,7 +44,7 @@ namespace Educadev.Functions
         public static async Task<IActionResult> OnList(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/list")] HttpRequest req,
             [Table("proposals")] CloudTable proposalsTable,
-            ILogger log)
+            ILogger log, IBinder binder)
         {
             var body = await SlackHelper.ReadSlackRequest(req);
             var parameters = SlackHelper.ParseBody(body);
@@ -49,7 +54,7 @@ namespace Educadev.Functions
 
             var allProposals = await proposalsTable.GetAllByPartition<Proposal>(SlackHelper.GetPartitionKey(team, channel));
 
-            var message = MessageHelpers.GetListMessage(allProposals, channel);
+            var message = await MessageHelpers.GetListMessage(binder, allProposals, channel);
 
             return Utils.Ok(message);
         }
@@ -159,6 +164,7 @@ namespace Educadev.Functions
                 dialog.Elements.Add(new SelectDialogElement("video", "Vidéo") {
                     Optional = true,
                     Options = allProposals
+                        .Where(x => string.IsNullOrWhiteSpace(x.PlannedIn))
                         .Select(x => new SelectOption {
                             Label = x.Name,
                             Value = x.RowKey

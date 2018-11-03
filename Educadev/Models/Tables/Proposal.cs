@@ -12,6 +12,8 @@ namespace Educadev.Models.Tables
         public string Url { get; set; }
         public string Notes { get; set; }
 
+        public string PlannedIn { get; set; }
+
         public string GetFormattedTitle() => Url.StartsWith("http") ? $"<{Url}|{Name}>" : Name;
     }
 }

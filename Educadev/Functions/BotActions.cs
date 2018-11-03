@@ -20,6 +20,11 @@ namespace Educadev.Functions
 {
     public static class BotActions
     {
+        static BotActions()
+        {
+            CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
+        }
+
         [FunctionName("SlackAction")]
         public static async Task<IActionResult> DispatchAction(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/action-endpoint")] HttpRequest req, 
@@ -44,7 +49,7 @@ namespace Educadev.Functions
                     var result = ValidatePlan(dsp);
                     if (!result.Valid) return Utils.Ok(result);
 
-                    await RecordPlan(binder, dsp);
+                    return await RecordPlan(binder, dsp);
                 }
             }
             else if (payload is InteractiveMessagePayload imp)
@@ -78,8 +83,7 @@ namespace Educadev.Functions
             var response = new SlackErrorsResponse();
             var now = Utils.GetLocalNow();
 
-            if (!DateTime.TryParseExact(dsp.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture,
-                DateTimeStyles.AllowWhiteSpaces, out var date))
+            if (!DateTime.TryParseExact(dsp.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var date))
                 response.AddError("date", "Le format de date n'est pas valide.");
             else if (date < now.Date)
                 response.AddError("date", "La date ne peut pas être dans le passé.");
@@ -133,9 +137,38 @@ namespace Educadev.Functions
             });
         }
 
-        private static async Task RecordPlan(IBinder binder, DialogSubmissionPayload planPayload)
+        private static async Task<IActionResult> RecordPlan(IBinder binder, DialogSubmissionPayload planPayload)
         {
-            var plans = await binder.GetTableCollector<Plan>("plans");
+            var plans = await binder.GetTable("plans");
+            var proposals = await binder.GetTable("proposals");
+
+            var videoKey = planPayload.GetValue("video");
+            if (!string.IsNullOrWhiteSpace(videoKey))
+            {
+                var proposal = await proposals.Retrieve<Proposal>(planPayload.PartitionKey, videoKey);
+                if (proposal == null)
+                {
+                    return Utils.Ok(new SlackMessage {
+                        Text = "Vidéo non trouvé",
+                        Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                    });
+                }
+
+                if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
+                {
+                    var otherPlan = await plans.Retrieve<Plan>(planPayload.PartitionKey, proposal.PlannedIn);
+                    if (otherPlan != null)
+                    {
+                        return Utils.Ok(new SlackMessage {
+                            Text = $"Ce vidéo est déjà planifié pour le {otherPlan.Date:dddd d MMMM}."
+                        });
+                    }
+                }
+
+                proposal.PlannedIn = planPayload.ActionTimestamp;
+
+                await proposals.ExecuteAsync(TableOperation.Replace(proposal));
+            }
 
             var plan = new Plan {
                 PartitionKey = planPayload.PartitionKey,
@@ -145,10 +178,10 @@ namespace Educadev.Functions
                 Channel = planPayload.Channel.Id,
                 Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces),
                 Owner = planPayload.GetValue("owner"),
-                Video = planPayload.GetValue("video")
+                Video = videoKey
             };
 
-            await plans.AddAsync(plan);
+            await plans.ExecuteAsync(TableOperation.Insert(plan));
 
             var message = new PostMessageRequest {
                 Text = $"<@{planPayload.User.Id}> vient de planifier un Lunch & Watch :",
@@ -157,6 +190,7 @@ namespace Educadev.Functions
             };
 
             await SlackHelper.SlackPost("chat.postMessage", planPayload.Team.Id, message);
+            return Utils.Ok();
         }
 
         private static async Task<IActionResult> ProcessPlanAction(IBinder binder, InteractiveMessagePayload payload)
@@ -252,7 +286,7 @@ namespace Educadev.Functions
                 // NOTE: Présentement la seule place qu'on peut supprimer une proposition c'est à partir de la liste de toutes les propositions.
                 // Si ça change, va falloir ajouter plus de logique ici pour recréer le bon type de message.
                 var allProposals = await proposals.GetAllByPartition<Proposal>(plan.PartitionKey);
-                var message = MessageHelpers.GetListMessage(allProposals, payload.Channel.Id);
+                var message = await MessageHelpers.GetListMessage(binder, allProposals, payload.Channel.Id);
                 message.ReplaceOriginal = true;
                 return Utils.Ok(message);
             }

@@ -21,6 +21,12 @@ namespace Educadev.Helpers
             return await binder.BindAsync<IAsyncCollector<T>>(attr);
         }
 
+        public static async Task<T> GetTableRow<T>(this IBinder binder, string tableName, string partitionKey, string rowKey)
+        {
+            var attr = new TableAttribute(tableName, partitionKey, rowKey);
+            return await binder.BindAsync<T>(attr);
+        }
+
         public static async Task<IList<T>> ExecuteQueryAsync<T>(
             this CloudTable table, 
             TableQuery<T> query,

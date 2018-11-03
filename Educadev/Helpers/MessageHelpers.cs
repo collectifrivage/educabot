@@ -10,15 +10,19 @@ namespace Educadev.Helpers
 {
     public class MessageHelpers
     {
-        public static SlackMessage GetListMessage(IList<Proposal> allProposals, string channel)
+        public static async Task<SlackMessage> GetListMessage(IBinder binder, IList<Proposal> allProposals, string channel)
         {
             SlackMessage message;
 
             if (allProposals.Any())
             {
+                var attachmentTasks = allProposals
+                    .OrderBy(x => x.Name)
+                    .Select(x => GetProposalAttachment(binder, x));
+
                 message = new SlackMessage {
                     Text = $"Voici les propositions actuelles pour <#{channel}>:",
-                    Attachments = allProposals.Select(GetProposalAttachment).ToList()
+                    Attachments = (await Task.WhenAll(attachmentTasks)).ToList()
                 };
             }
             else
@@ -43,7 +47,7 @@ namespace Educadev.Helpers
 
             var result = new List<MessageAttachment> {
                 new MessageAttachment {
-                    Title = plan.Date.ToString("'Le' dddd d MMMM", CultureInfo.GetCultureInfo("fr-CA")),
+                    Title = plan.Date.ToString("'Le' dddd d MMMM"),
                     Fields = new List<AttachmentField> {
                         new AttachmentField {
                             Title = "Responsable",
@@ -85,29 +89,40 @@ namespace Educadev.Helpers
             return result;
         }
 
-        public static MessageAttachment GetProposalAttachment(Proposal p)
+        public static async Task<MessageAttachment> GetProposalAttachment(IBinder binder, Proposal proposal)
         {
-            return new MessageAttachment {
-                AuthorName = $"Proposé par <@{p.ProposedBy}>",
-                Title = p.GetFormattedTitle(),
-                Text = p.Notes,
-                CallbackId = "proposal_action",
-                Actions = new List<MessageAction> {
+            var attachment = new MessageAttachment {
+                AuthorName = $"Proposé par <@{proposal.ProposedBy}>",
+                Title = proposal.GetFormattedTitle(),
+                Text = proposal.Notes
+            };
+
+            if (string.IsNullOrWhiteSpace(proposal.PlannedIn))
+            {
+                attachment.CallbackId = "proposal_action";
+                attachment.Actions = new List<MessageAction> {
                     new MessageAction {
                         Type = "button",
                         Name = "delete",
                         Text = "Supprimer",
-                        Value = p.RowKey,
+                        Value = proposal.RowKey,
                         Style = "danger",
                         Confirm = new ActionConfirmation {
                             Title = "Supprimer la proposition",
-                            Text = $"Voulez-vous vraiment supprimer la proposition \"{p.Name}\" ?",
+                            Text = $"Voulez-vous vraiment supprimer la proposition \"{proposal.Name}\" ?",
                             OkText = "Supprimer",
                             DismissText = "Annuler"
                         }
                     }
-                }
-            };
+                };
+            }
+            else
+            {
+                var plan = await binder.GetTableRow<Plan>("plans", proposal.PartitionKey, proposal.PlannedIn);
+                attachment.Footer = $"Planifié pour le {plan.Date:dddd d MMMM}.";
+            }
+
+            return attachment;
         }
 
         public static MessageAttachment GetRemoveMessageAttachment()
