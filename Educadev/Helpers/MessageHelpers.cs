@@ -89,7 +89,7 @@ namespace Educadev.Helpers
             return result;
         }
 
-        public static async Task<MessageAttachment> GetProposalAttachment(IBinder binder, Proposal proposal)
+        public static async Task<MessageAttachment> GetProposalAttachment(IBinder binder, Proposal proposal, bool allowActions = true)
         {
             var attachment = new MessageAttachment {
                 AuthorName = $"Proposé par <@{proposal.ProposedBy}>",
@@ -97,29 +97,32 @@ namespace Educadev.Helpers
                 Text = proposal.Notes
             };
 
-            if (string.IsNullOrWhiteSpace(proposal.PlannedIn))
+            if (allowActions)
             {
-                attachment.CallbackId = "proposal_action";
-                attachment.Actions = new List<MessageAction> {
-                    new MessageAction {
-                        Type = "button",
-                        Name = "delete",
-                        Text = "Supprimer",
-                        Value = proposal.RowKey,
-                        Style = "danger",
-                        Confirm = new ActionConfirmation {
-                            Title = "Supprimer la proposition",
-                            Text = $"Voulez-vous vraiment supprimer la proposition \"{proposal.Name}\" ?",
-                            OkText = "Supprimer",
-                            DismissText = "Annuler"
+                if (string.IsNullOrWhiteSpace(proposal.PlannedIn))
+                {
+                    attachment.CallbackId = "proposal_action";
+                    attachment.Actions = new List<MessageAction> {
+                        new MessageAction {
+                            Type = "button",
+                            Name = "delete",
+                            Text = "Supprimer",
+                            Value = proposal.RowKey,
+                            Style = "danger",
+                            Confirm = new ActionConfirmation {
+                                Title = "Supprimer la proposition",
+                                Text = $"Voulez-vous vraiment supprimer la proposition \"{proposal.Name}\" ?",
+                                OkText = "Supprimer",
+                                DismissText = "Annuler"
+                            }
                         }
-                    }
-                };
-            }
-            else
-            {
-                var plan = await binder.GetTableRow<Plan>("plans", proposal.PartitionKey, proposal.PlannedIn);
-                attachment.Footer = $"Planifié pour le {plan.Date:dddd d MMMM}.";
+                    };
+                }
+                else
+                {
+                    var plan = await binder.GetTableRow<Plan>("plans", proposal.PartitionKey, proposal.PlannedIn);
+                    attachment.Footer = $"Planifié pour le {plan.Date:dddd d MMMM}.";
+                }
             }
 
             return attachment;

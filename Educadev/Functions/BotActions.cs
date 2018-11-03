@@ -274,18 +274,38 @@ namespace Educadev.Functions
         {
             var proposals = await binder.GetTable("proposals");
             var action = payload.Actions.First();
-            var plan = await proposals.Retrieve<Proposal>(payload.PartitionKey, action.Value);
+            var proposal = await proposals.Retrieve<Proposal>(payload.PartitionKey, action.Value);
 
             if (action.Name == "delete")
             {
-                // TODO: Ajouter de la logique pour ne pas supprimer une proposition assignée à un plan
-                await proposals.ExecuteAsync(TableOperation.Delete(plan));
+                // Bloquer la suppression d'une proposition plannifiée
+                if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
+                {
+                    var plan = await binder.GetTableRow<Plan>("plans", payload.PartitionKey, proposal.PlannedIn);
+                    if (plan != null)
+                    {
+                        return Utils.Ok(new SlackMessage {
+                            Text = $"Ce vidéo est déjà planifié pour le {plan.Date:dddd d MMMM}.",
+                            Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                        });
+                    }
+                }
+
+                await proposals.ExecuteAsync(TableOperation.Delete(proposal));
                 
-                // TODO: Notifier le owner si c'est pas lui qui supprime sa proposition
+                // Notifier le owner si c'est pas lui qui supprime sa proposition
+                if (proposal.ProposedBy != payload.User.Id)
+                {
+                    await SlackHelper.SlackPost("chat.postMessage", payload.Team.Id, new PostMessageRequest {
+                        Channel = proposal.ProposedBy,
+                        Text = $"<@{payload.User.Id}> vient de supprimer votre proposition de vidéo dans <#{payload.Channel.Id}>:",
+                        Attachments = { await MessageHelpers.GetProposalAttachment(binder, proposal, allowActions: false) }
+                    });
+                }
                 
                 // NOTE: Présentement la seule place qu'on peut supprimer une proposition c'est à partir de la liste de toutes les propositions.
                 // Si ça change, va falloir ajouter plus de logique ici pour recréer le bon type de message.
-                var allProposals = await proposals.GetAllByPartition<Proposal>(plan.PartitionKey);
+                var allProposals = await proposals.GetAllByPartition<Proposal>(proposal.PartitionKey);
                 var message = await MessageHelpers.GetListMessage(binder, allProposals, payload.Channel.Id);
                 message.ReplaceOriginal = true;
                 return Utils.Ok(message);

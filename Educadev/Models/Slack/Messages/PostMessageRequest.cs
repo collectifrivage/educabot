@@ -12,7 +12,7 @@ namespace Educadev.Models.Slack.Messages
         [JsonProperty("as_user")]
         public bool AsUser { get; set; }
         [JsonProperty("attachments")]
-        public IList<MessageAttachment> Attachments { get; set; }
+        public IList<MessageAttachment> Attachments { get; set; } = new List<MessageAttachment>();
         [JsonProperty("icon_emoji")]
         public string IconEmoji { get; set; }
         [JsonProperty("icon_url")]
