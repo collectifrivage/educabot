@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
 using Microsoft.WindowsAzure.Storage.Table;
 
-namespace Educadev
+namespace Educadev.Helpers
 {
     public static class Extensions
     {

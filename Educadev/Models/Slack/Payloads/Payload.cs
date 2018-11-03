@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Educadev.Helpers;
+using Newtonsoft.Json;
 
 namespace Educadev.Models.Slack.Payloads
 {

@@ -13,7 +13,7 @@ using Educadev.Models.Slack.Payloads;
 using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
 
-namespace Educadev
+namespace Educadev.Helpers
 {
     public static class SlackHelper
     {
