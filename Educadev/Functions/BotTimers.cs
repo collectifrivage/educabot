@@ -75,12 +75,23 @@ namespace Educadev.Functions
         public static async Task CancelOrphanPlans(
             [TimerTrigger("0 05 12 * * *", RunOnStartup = true)] TimerInfo timer, // 12:05AM daily
             [Table("plans")] CloudTable plansTable,
+            [Table("proposals")] CloudTable proposalsTable,
             IBinder binder)
         {
             var plans = await GetTodayPlansWithoutResponsible(plansTable);
 
             foreach (var plan in plans)
             {
+                if (!string.IsNullOrWhiteSpace(plan.Video))
+                {
+                    var proposal = await proposalsTable.Retrieve<Proposal>(plan.PartitionKey, plan.Video);
+                    if (proposal != null)
+                    {
+                        proposal.PlannedIn = "";
+                        await proposalsTable.ExecuteAsync(TableOperation.Replace(proposal));
+                    }
+                }
+
                 var result = await plansTable.ExecuteAsync(TableOperation.Delete(plan));
                 if (result.IsError()) continue;
 

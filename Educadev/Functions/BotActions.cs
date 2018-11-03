@@ -240,16 +240,18 @@ namespace Educadev.Functions
                 }
 
                 plan.Owner = payload.User.Id;
+
+                var result = await plans.ExecuteAsync(TableOperation.Replace(plan));
+                if (result.IsError())
+                {
+                    await MessageHelpers.PostErrorMessage(payload);
+                    return await UpdatePlanMessage(binder, payload, plan, "");
+                }
+                
+                return await UpdatePlanMessage(binder, payload, plan, "Merci!");
             }
 
-            var result = await plans.ExecuteAsync(TableOperation.Replace(plan));
-            if (result.IsError())
-            {
-                await MessageHelpers.PostErrorMessage(payload);
-                return await UpdatePlanMessage(binder, payload, plan, "");
-            }
-            
-            return await UpdatePlanMessage(binder, payload, plan, "Merci!");
+            return Utils.Ok();
         }
 
         private static async Task<IActionResult> UpdatePlanMessage(IBinder binder, InteractiveMessagePayload payload, Plan plan, string ephemeralText)
