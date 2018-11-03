@@ -10,7 +10,7 @@ namespace Educadev.Models.Tables
         public string Channel { get; set; }
 
         public DateTime Date { get; set; }
-        public string Owner { get; set; }
-        public string Video { get; set; }
+        public string Owner { get; set; } = "";
+        public string Video { get; set; } = "";
     }
 }
