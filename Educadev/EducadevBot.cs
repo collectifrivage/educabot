@@ -146,7 +146,7 @@ namespace Educadev
                 Channel = proposalPayload.Channel.Id,
                 Attachments = new [] {
                     new MessageAttachment {
-                        Title = $"<{proposal.Url}|{proposal.Name}>",
+                        Title = proposal.GetFormattedTitle(),
                         Text = proposal.Notes,
                         Footer = "Utilisez /dev-list pour voir toutes les propositions"
                     }
@@ -272,7 +272,7 @@ namespace Educadev
         {
             return new MessageAttachment {
                 AuthorName = $"Proposé par <@{p.ProposedBy}>",
-                Title = $"<{p.Url}|{p.Name}>",
+                Title = p.GetFormattedTitle(),
                 Text = p.Notes,
                 CallbackId = "proposal_action",
                 Actions = new List<MessageAction> {
@@ -327,7 +327,7 @@ namespace Educadev
                         },
                         new AttachmentField {
                             Title = "Video",
-                            Value = proposal == null ? "À déterminer" : $"<{proposal.Url}|{proposal.Name}>",
+                            Value = proposal == null ? "À déterminer" : proposal.GetFormattedTitle(),
                             Short = true
                         }
                     }
