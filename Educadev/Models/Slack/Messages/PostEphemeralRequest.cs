@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 
 namespace Educadev.Models.Slack.Messages
 {
-    public class PostEphemeralMessageRequest
+    public class PostEphemeralRequest
     {
         [JsonProperty("channel")]
         public string Channel { get; set; }

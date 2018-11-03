@@ -9,7 +9,7 @@ namespace Educadev.Models.Slack.Messages
         public string Text { get; set; }
 
         [JsonProperty("attachments")]
-        public List<MessageAttachment> Attachments { get; set; } = new List<MessageAttachment>();
+        public IList<MessageAttachment> Attachments { get; set; } = new List<MessageAttachment>();
 
         [JsonProperty("thread_ts")]
         public string ThreadTimestamp { get; set; }

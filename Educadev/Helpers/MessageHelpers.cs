@@ -55,7 +55,9 @@ namespace Educadev.Helpers
                             Value = proposal == null ? "À déterminer" : proposal.GetFormattedTitle(),
                             Short = true
                         }
-                    }
+                    },
+                    Footer = (proposal == null ? "Proposez des sujets avec /edu:propose! " : "") +
+                             "Utilisez /edu:next pour voir le prochain Lunch & Watch planifié."
                 }
             };
 

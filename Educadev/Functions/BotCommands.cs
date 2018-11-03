@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices.ComTypes;
 using System.Threading.Tasks;
 using Educadev.Helpers;
 using Educadev.Models.Slack.Dialogs;
+using Educadev.Models.Slack.Messages;
 using Educadev.Models.Tables;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -65,12 +67,48 @@ namespace Educadev.Functions
 
             var dialogRequest = new OpenDialogRequest {
                 TriggerId = parameters["trigger_id"],
-                Dialog = GetPlanDialog(allProposals)
+                Dialog = GetPlanDialog(allProposals, defaultDate: parameters["text"])
             };
 
             await SlackHelper.SlackPost("dialog.open", parameters["team_id"], dialogRequest);
 
             return Utils.Ok();
+        }
+
+        [FunctionName("SlackCommandNext")]
+        public static async Task<IActionResult> OnNext(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/next")] HttpRequest req,
+            [Table("plans")] CloudTable plansTable,
+            ILogger log, IBinder binder)
+        {
+            var body = await SlackHelper.ReadSlackRequest(req);
+            var parameters = SlackHelper.ParseBody(body);
+            var partitionKey = SlackHelper.GetPartitionKey(parameters["team_id"], parameters["channel_id"]);
+
+            var futurePlansQuery = new TableQuery<Plan>()
+                .Where(
+                    TableQuery.CombineFilters(
+                        TableQuery.GenerateFilterCondition("PartitionKey", "eq", partitionKey),
+                        "and",
+                        TableQuery.GenerateFilterConditionForDate("Date", "gt", Utils.GetLocalNow()))
+                );
+            var futurePlans = await plansTable.ExecuteQueryAsync(futurePlansQuery);
+            var nextPlan = futurePlans.OrderBy(x => x.Date).FirstOrDefault();
+
+            var message = new SlackMessage {
+                Text = nextPlan == null 
+                    ? "Aucun Lunch & Watch n'est à l'horaire. Utilisez `/edu:plan` pour en planifier un!"
+                    : "Voici le prochain Lunch & Watch planifié :"
+            };
+
+            if (nextPlan != null)
+            {
+                message.Attachments = await MessageHelpers.GetPlanAttachments(binder, nextPlan);
+            }
+
+            message.Attachments.Add(MessageHelpers.GetRemoveMessageAttachment());
+
+            return Utils.Ok(message);
         }
 
         private static Dialog GetProposeDialog(string defaultName)
@@ -97,7 +135,7 @@ namespace Educadev.Functions
             };
         }
 
-        private static Dialog GetPlanDialog(IList<Proposal> allProposals)
+        private static Dialog GetPlanDialog(IList<Proposal> allProposals, string defaultDate)
         {
             var dialog = new Dialog {
                 CallbackId = "plan",
@@ -105,7 +143,8 @@ namespace Educadev.Functions
                 SubmitLabel = "Planifier",
                 Elements = new List<DialogElement> {
                     new TextDialogElement("date", "Date") {
-                        Hint = "Au format AAAA-MM-JJ"
+                        Hint = "Au format AAAA-MM-JJ",
+                        DefaultValue = defaultDate
                     },
                     new SelectDialogElement("owner", "Responsable") {
                         Optional = true,

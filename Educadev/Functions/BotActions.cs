@@ -54,8 +54,7 @@ namespace Educadev.Functions
                     case "message_action" when imp.Actions.First().Name == "removeme":
                         return Utils.Ok(new SlackMessage {DeleteOriginal = true});
                     case "plan_action":
-                        await ProcessPlanAction(binder, imp);
-                        break;
+                        return await ProcessPlanAction(binder, imp);
                     case "proposal_action":
                         return await ProcessProposalAction(binder, imp);
                 }
@@ -68,7 +67,7 @@ namespace Educadev.Functions
         {
             var response = new SlackErrorsResponse();
 
-            if (!Regex.IsMatch(dsp.Submission["url"], @"^(https?://|\\\\)"))
+            if (!Regex.IsMatch(dsp.GetValue("url"), @"^(https?://|\\\\)"))
                 response.AddError("url", @"L'URL doit commencer par http://, https:// ou \\");
 
             return response;
@@ -79,7 +78,7 @@ namespace Educadev.Functions
             var response = new SlackErrorsResponse();
             var now = Utils.GetLocalNow();
 
-            if (!DateTime.TryParseExact(dsp.Submission["date"], "yyyy-MM-dd", CultureInfo.InvariantCulture,
+            if (!DateTime.TryParseExact(dsp.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.AllowWhiteSpaces, out var date))
                 response.AddError("date", "Le format de date n'est pas valide.");
             else if (date < now.Date)
@@ -91,9 +90,9 @@ namespace Educadev.Functions
 
             if (date == now.Date)
             {
-                if (string.IsNullOrWhiteSpace(dsp.Submission["owner"]))
+                if (string.IsNullOrWhiteSpace(dsp.GetValue("owner")))
                     response.AddError("owner", "Comme la présentation est prévue aujourd'hui, un responsable doit être désigné.");
-                if (string.IsNullOrWhiteSpace(dsp.Submission["video"]))
+                if (string.IsNullOrWhiteSpace(dsp.GetValue("video")))
                     response.AddError("video", "Comme la présentation est prévue aujourd'hui, un vidéo doit être choisi.");
             }
 
@@ -110,9 +109,9 @@ namespace Educadev.Functions
                 PartitionKey = proposalPayload.PartitionKey,
                 RowKey = proposalPayload.ActionTimestamp,
 
-                Name = proposalPayload.Submission["name"],
-                Url = proposalPayload.Submission["url"],
-                Notes = proposalPayload.Submission["notes"],
+                Name = proposalPayload.GetValue("name"),
+                Url = proposalPayload.GetValue("url"),
+                Notes = proposalPayload.GetValue("notes"),
                 ProposedBy = proposalPayload.User.Id
             };
 
@@ -125,7 +124,7 @@ namespace Educadev.Functions
                     new MessageAttachment {
                         Title = proposal.GetFormattedTitle(),
                         Text = proposal.Notes,
-                        Footer = "Utilisez /dev-list pour voir toutes les propositions"
+                        Footer = "Utilisez /edu:list pour voir toutes les propositions"
                     }
                 }
             });
@@ -138,9 +137,9 @@ namespace Educadev.Functions
             var plan = new Plan {
                 PartitionKey = planPayload.PartitionKey,
                 RowKey = planPayload.ActionTimestamp,
-                Date = DateTime.ParseExact(planPayload.Submission["date"], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces),
-                Owner = planPayload.Submission["owner"],
-                Video = planPayload.Submission["video"]
+                Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces),
+                Owner = planPayload.GetValue("owner"),
+                Video = planPayload.GetValue("video")
             };
 
             await plans.AddAsync(plan);
@@ -154,7 +153,7 @@ namespace Educadev.Functions
             await SlackHelper.SlackPost("chat.postMessage", planPayload.Team.Id, message);
         }
 
-        private static async Task ProcessPlanAction(IBinder binder, InteractiveMessagePayload payload)
+        private static async Task<IActionResult> ProcessPlanAction(IBinder binder, InteractiveMessagePayload payload)
         {
             var plans = await binder.GetTable("plans");
 
@@ -165,14 +164,17 @@ namespace Educadev.Functions
             {
                 if (plan.Owner != null)
                 {
-                    await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, new PostEphemeralMessageRequest {
+                    var message = new PostEphemeralRequest {
+                        User = payload.User.Id,
+                        Channel = payload.Channel.Id,
                         Text = $"<@{plan.Owner}> est déjà responsable de ce Lunch & Watch.",
                         Attachments = new List<MessageAttachment> {
                             MessageHelpers.GetRemoveMessageAttachment()
                         }
-                    });
-
-                    return;
+                    };
+                    await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, message);
+                    
+                    return await UpdatePlanMessage(binder, payload, plan, "");
                 }
 
                 plan.Owner = payload.User.Id;
@@ -181,22 +183,51 @@ namespace Educadev.Functions
             var result = await plans.ExecuteAsync(TableOperation.Replace(plan));
             if (result.HttpStatusCode >= 400)
             {
-                await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, new PostEphemeralMessageRequest {
+                var message = new PostEphemeralRequest {
+                    User = payload.User.Id,
+                    Channel = payload.Channel.Id,
                     Text = "Oups! Il y a eu un problème. Ré-essayez ?",
                     Attachments = new List<MessageAttachment> {
                         MessageHelpers.GetRemoveMessageAttachment()
                     }
-                });
+                };
+                await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, message);
+                
+                return await UpdatePlanMessage(binder, payload, plan, "");
             }
+            
+            return await UpdatePlanMessage(binder, payload, plan, "Merci!");
+        }
 
-            var message = new UpdateMessageRequest {
-                Text = payload.OriginalMessage.Text,
-                Channel = payload.Channel.Id,
-                Timestamp = payload.MessageTimestamp,
-                Attachments = await MessageHelpers.GetPlanAttachments(binder, plan)
-            };
+        private static async Task<IActionResult> UpdatePlanMessage(IBinder binder, InteractiveMessagePayload payload, Plan plan, string ephemeralText)
+        {
+            if (payload.OriginalMessage != null)
+            {
+                // Message publique
 
-            await SlackHelper.SlackPost("chat.update", payload.Team.Id, message);
+                var message = new UpdateMessageRequest {
+                    Text = payload.OriginalMessage.Text,
+                    Channel = payload.Channel.Id,
+                    Timestamp = payload.MessageTimestamp,
+                    Attachments = await MessageHelpers.GetPlanAttachments(binder, plan)
+                };
+
+                await SlackHelper.SlackPost("chat.update", payload.Team.Id, message);
+                return Utils.Ok();
+            }
+            else
+            {
+                // Message ephémère
+
+                var message = new SlackMessage {
+                    Text = ephemeralText,
+                    Attachments = await MessageHelpers.GetPlanAttachments(binder, plan),
+                    ReplaceOriginal = true
+                };
+
+                message.Attachments.Add(MessageHelpers.GetRemoveMessageAttachment());
+                return Utils.Ok(message);
+            }
         }
 
         private static async Task<IActionResult> ProcessProposalAction(IBinder binder, InteractiveMessagePayload payload)
