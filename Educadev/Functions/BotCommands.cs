@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -95,7 +96,7 @@ namespace Educadev.Functions
                     TableQuery.CombineFilters(
                         TableQuery.GenerateFilterCondition("PartitionKey", "eq", partitionKey),
                         "and",
-                        TableQuery.GenerateFilterConditionForDate("Date", "gt", Utils.GetLocalNow()))
+                        TableQuery.GenerateFilterConditionForDate("Date", "gt", DateTime.Now))
                 );
             var futurePlans = await plansTable.ExecuteQueryAsync(futurePlansQuery);
             var nextPlan = futurePlans.OrderBy(x => x.Date).FirstOrDefault();

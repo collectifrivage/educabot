@@ -81,7 +81,7 @@ namespace Educadev.Functions
         private static SlackErrorsResponse ValidatePlan(DialogSubmissionPayload dsp)
         {
             var response = new SlackErrorsResponse();
-            var now = Utils.GetLocalNow();
+            var now = DateTime.Now;
 
             if (!DateTime.TryParseExact(dsp.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var date))
                 response.AddError("date", "Le format de date n'est pas valide.");
