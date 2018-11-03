@@ -24,7 +24,7 @@ namespace Educadev.Helpers
             else
             {
                 message = new SlackMessage {
-                    Text = $"Il n'y a aucune proposition pour le moment dans <#{channel}>."
+                    Text = $"Il n'y a aucune proposition pour le moment dans <#{channel}>. Utilisez `/edu:propose` pour ajouter des vidéos!"
                 };
             }
 
@@ -56,7 +56,7 @@ namespace Educadev.Helpers
                             Short = true
                         }
                     },
-                    Footer = (proposal == null ? "Proposez des sujets avec /edu:propose! " : "") +
+                    Footer = (proposal == null ? "Proposez des vidéos avec /edu:propose! " : "") +
                              "Utilisez /edu:next pour voir le prochain Lunch & Watch planifié."
                 }
             };
