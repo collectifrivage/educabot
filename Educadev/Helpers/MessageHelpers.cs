@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Educadev.Models.Slack.Messages;
+using Educadev.Models.Slack.Payloads;
 using Educadev.Models.Tables;
 using Microsoft.Azure.WebJobs;
 
@@ -140,6 +141,18 @@ namespace Educadev.Helpers
                     }
                 }
             };
+        }
+
+        public static async Task PostErrorMessage(Payload payload)
+        {
+            var message = new PostEphemeralRequest {
+                User = payload.User.Id,
+                Channel = payload.Channel.Id,
+                Text = "Oups! Il y a eu un problème. Ré-essayez ?",
+                Attachments = {GetRemoveMessageAttachment()}
+            };
+
+            await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, message);
         }
     }
 }

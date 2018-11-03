@@ -81,7 +81,8 @@ namespace Educadev.Functions
 
             foreach (var plan in plans)
             {
-                await plansTable.ExecuteAsync(TableOperation.Delete(plan));
+                var result = await plansTable.ExecuteAsync(TableOperation.Delete(plan));
+                if (result.IsError()) continue;
 
                 await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,

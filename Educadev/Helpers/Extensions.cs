@@ -61,5 +61,7 @@ namespace Educadev.Helpers
             var result = await table.ExecuteAsync(TableOperation.Retrieve<T>(partitionKey, rowKey));
             return result?.Result as T;
         }
+
+        public static bool IsError(this TableResult result) => result.HttpStatusCode >= 400;
     }
 }

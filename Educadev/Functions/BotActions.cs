@@ -179,7 +179,12 @@ namespace Educadev.Functions
 
                 proposal.PlannedIn = planPayload.ActionTimestamp;
 
-                await proposals.ExecuteAsync(TableOperation.Replace(proposal));
+                var proposalResult = await proposals.ExecuteAsync(TableOperation.Replace(proposal));
+                if (proposalResult.IsError())
+                {
+                    await MessageHelpers.PostErrorMessage(planPayload);
+                    return Utils.Ok();
+                }
             }
 
             var plan = new Plan {
@@ -193,7 +198,12 @@ namespace Educadev.Functions
                 Video = videoKey
             };
 
-            await plans.ExecuteAsync(TableOperation.Insert(plan));
+            var result = await plans.ExecuteAsync(TableOperation.Insert(plan));
+            if (result.IsError())
+            {
+                await MessageHelpers.PostErrorMessage(planPayload);
+                return Utils.Ok();
+            }
 
             var message = new PostMessageRequest {
                 Text = $"<@{planPayload.User.Id}> vient de planifier un Lunch & Watch :",
@@ -233,18 +243,9 @@ namespace Educadev.Functions
             }
 
             var result = await plans.ExecuteAsync(TableOperation.Replace(plan));
-            if (result.HttpStatusCode >= 400)
+            if (result.IsError())
             {
-                var message = new PostEphemeralRequest {
-                    User = payload.User.Id,
-                    Channel = payload.Channel.Id,
-                    Text = "Oups! Il y a eu un problème. Ré-essayez ?",
-                    Attachments = new List<MessageAttachment> {
-                        MessageHelpers.GetRemoveMessageAttachment()
-                    }
-                };
-                await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, message);
-                
+                await MessageHelpers.PostErrorMessage(payload);
                 return await UpdatePlanMessage(binder, payload, plan, "");
             }
             
@@ -303,7 +304,12 @@ namespace Educadev.Functions
                     }
                 }
 
-                await proposals.ExecuteAsync(TableOperation.Delete(proposal));
+                var result = await proposals.ExecuteAsync(TableOperation.Delete(proposal));
+                if (result.IsError())
+                {
+                    await MessageHelpers.PostErrorMessage(payload);
+                    return Utils.Ok();
+                }
                 
                 // Notifier le owner si c'est pas lui qui supprime sa proposition
                 if (proposal.ProposedBy != payload.User.Id)
