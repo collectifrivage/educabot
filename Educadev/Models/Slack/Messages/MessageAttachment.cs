@@ -13,6 +13,9 @@ namespace Educadev.Models.Slack.Messages
 
         [JsonProperty("fallback")]
         public string Fallback { get; set; } = "";
+
+        [JsonProperty("pretext")]
+        public string PreText { get; set; }
         [JsonProperty("text")]
         public string Text { get; set; }
 

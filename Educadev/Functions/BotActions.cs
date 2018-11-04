@@ -208,7 +208,7 @@ namespace Educadev.Functions
             var message = new PostMessageRequest {
                 Text = $"<@{planPayload.User.Id}> vient de planifier un Lunch & Watch :",
                 Channel = planPayload.Channel.Id,
-                Attachments = await MessageHelpers.GetPlanAttachments(binder, plan)
+                Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
             };
 
             await SlackHelper.SlackPost("chat.postMessage", planPayload.Team.Id, message);
@@ -264,7 +264,7 @@ namespace Educadev.Functions
                     Text = payload.OriginalMessage.Text,
                     Channel = payload.Channel.Id,
                     Timestamp = payload.MessageTimestamp,
-                    Attachments = await MessageHelpers.GetPlanAttachments(binder, plan)
+                    Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
                 };
 
                 await SlackHelper.SlackPost("chat.update", payload.Team.Id, message);
@@ -276,7 +276,7 @@ namespace Educadev.Functions
 
                 var message = new SlackMessage {
                     Text = ephemeralText,
-                    Attachments = await MessageHelpers.GetPlanAttachments(binder, plan),
+                    Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)},
                     ReplaceOriginal = true
                 };
 

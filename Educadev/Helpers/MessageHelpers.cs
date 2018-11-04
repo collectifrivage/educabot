@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Educadev.Models.Slack.Messages;
@@ -37,7 +36,7 @@ namespace Educadev.Helpers
             return message;
         }
 
-        public static async Task<IList<MessageAttachment>> GetPlanAttachments(IBinder binder, Plan plan)
+        public static async Task<MessageAttachment> GetPlanAttachment(IBinder binder, Plan plan)
         {
             Proposal proposal = null;
             if (!string.IsNullOrWhiteSpace(plan.Video))
@@ -46,45 +45,40 @@ namespace Educadev.Helpers
                 proposal = await proposals.Retrieve<Proposal>(plan.PartitionKey, plan.Video);
             }
 
-            var result = new List<MessageAttachment> {
-                new MessageAttachment {
-                    Title = plan.Date.ToString("'Le' dddd d MMMM"),
-                    Fields = new List<AttachmentField> {
-                        new AttachmentField {
-                            Title = "Responsable",
-                            Value = string.IsNullOrWhiteSpace(plan.Owner) ? "À déterminer" : $"<@{plan.Owner}>",
-                            Short = true
-                        },
-                        new AttachmentField {
-                            Title = "Video",
-                            Value = proposal == null ? "À déterminer" : proposal.GetFormattedTitle(),
-                            Short = true
-                        }
+            var result = new MessageAttachment {
+                PreText = $"*Le {plan.Date:dddd d MMMM}*",
+                Color = "#004492",
+                Fields = new List<AttachmentField> {
+                    new AttachmentField {
+                        Title = "Responsable",
+                        Value = string.IsNullOrWhiteSpace(plan.Owner) ? "À déterminer" : $"<@{plan.Owner}>",
+                        Short = true
                     },
-                    Footer = (proposal == null ? "Proposez des vidéos avec /edu:propose! " : "") +
-                             "Utilisez /edu:next pour voir le prochain Lunch & Watch planifié."
-                }
+                    new AttachmentField {
+                        Title = "Video",
+                        Value = proposal == null ? "À déterminer" : proposal.GetFormattedTitle(),
+                        Short = true
+                    }
+                },
+                CallbackId = "plan_action"
             };
 
             if (string.IsNullOrWhiteSpace(plan.Owner))
             {
-                result.Add(new MessageAttachment {
-                    CallbackId = "plan_action",
-                    Actions = new List<MessageAction> {
-                        new MessageAction {
-                            Type = "button",
-                            Name = "volunteer",
-                            Value = plan.RowKey,
-                            Text = "Je m'en occupe",
-                            Confirm = new ActionConfirmation {
-                                Title = "Confirmer",
-                                Text = "Vous confirmez que vous êtes responsable de ce Lunch & Watch ?",
-                                OkText = "Oui!",
-                                DismissText = "Oups, non"
-                            }
+                result.Actions = new List<MessageAction> {
+                    new MessageAction {
+                        Type = "button",
+                        Name = "volunteer",
+                        Value = plan.RowKey,
+                        Text = "Je m'en occupe",
+                        Confirm = new ActionConfirmation {
+                            Title = "Confirmer",
+                            Text = "Vous confirmez que vous êtes responsable de ce Lunch & Watch ?",
+                            OkText = "Oui!",
+                            DismissText = "Oups, non"
                         }
                     }
-                });
+                };
             }
 
             return result;
@@ -95,12 +89,17 @@ namespace Educadev.Helpers
             var attachment = new MessageAttachment {
                 AuthorName = $"Proposé par <@{proposal.ProposedBy}>",
                 Title = proposal.GetFormattedTitle(),
-                Text = proposal.Notes
+                Text = proposal.Notes,
+                Color = "#1d7c00",
             };
 
             if (allowActions)
             {
-                if (string.IsNullOrWhiteSpace(proposal.PlannedIn))
+                Plan plan = null;
+                if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
+                    plan = await binder.GetTableRow<Plan>("plans", proposal.PartitionKey, proposal.PlannedIn);
+
+                if (plan == null)
                 {
                     attachment.CallbackId = "proposal_action";
                     attachment.Actions = new List<MessageAction> {
@@ -121,7 +120,6 @@ namespace Educadev.Helpers
                 }
                 else
                 {
-                    var plan = await binder.GetTableRow<Plan>("plans", proposal.PartitionKey, proposal.PlannedIn);
                     attachment.Footer = $"Planifié pour le {plan.Date:dddd d MMMM}.";
                 }
             }

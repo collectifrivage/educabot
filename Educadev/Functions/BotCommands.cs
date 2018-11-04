@@ -99,18 +99,14 @@ namespace Educadev.Functions
                         TableQuery.GenerateFilterConditionForDate("Date", "gt", DateTime.Now))
                 );
             var futurePlans = await plansTable.ExecuteQueryAsync(futurePlansQuery);
-            var nextPlan = futurePlans.OrderBy(x => x.Date).FirstOrDefault();
 
+            var attachmentTasks = futurePlans.OrderBy(x => x.Date).Select(x => MessageHelpers.GetPlanAttachment(binder, x));
             var message = new SlackMessage {
-                Text = nextPlan == null 
-                    ? "Aucun Lunch & Watch n'est à l'horaire. Utilisez `/edu:plan` pour en planifier un!"
-                    : "Voici le prochain Lunch & Watch planifié :"
+                Text = futurePlans.Any() 
+                    ? "Voici les Lunch & Watch planifiés :"
+                    : "Aucun Lunch & Watch n'est à l'horaire. Utilisez `/edu:plan` pour en planifier un!",
+                Attachments = (await Task.WhenAll(attachmentTasks)).ToList()
             };
-
-            if (nextPlan != null)
-            {
-                message.Attachments = await MessageHelpers.GetPlanAttachments(binder, nextPlan);
-            }
 
             message.Attachments.Add(MessageHelpers.GetRemoveMessageAttachment());
 

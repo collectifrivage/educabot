@@ -30,7 +30,7 @@ namespace Educadev.Functions
                 await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "Le Lunch & Watch de ce midi a besoin d'un responsable!",
-                    Attachments = await MessageHelpers.GetPlanAttachments(binder, plan)
+                    Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
                 });
             }
         }
@@ -48,7 +48,7 @@ namespace Educadev.Functions
                 await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "<!channel> Rappel: Le Lunch & Watch de ce midi a besoin d'un responsable!",
-                    Attachments = await MessageHelpers.GetPlanAttachments(binder, plan)
+                    Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
                 });
             }
         }
@@ -66,7 +66,7 @@ namespace Educadev.Functions
                 await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "<!channel> *Dernier rappel*: Le Lunch & Watch de ce midi a besoin d'un responsable! Si personne ne se manifeste, l'événement sera annulé.",
-                    Attachments = await MessageHelpers.GetPlanAttachments(binder, plan)
+                    Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
                 });
             }
         }
