@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Educadev.Helpers;
 using Educadev.Models.Slack;
+using Educadev.Models.Slack.Dialogs;
 using Educadev.Models.Slack.Messages;
 using Educadev.Models.Slack.Payloads;
 using Educadev.Models.Tables;
@@ -62,6 +63,8 @@ namespace Educadev.Functions
                         return await ProcessPlanAction(binder, imp);
                     case "proposal_action":
                         return await ProcessProposalAction(binder, imp);
+                    case "dialog_action":
+                        return await ProcessDialogAction(binder, imp);
                 }
             }
 
@@ -96,7 +99,7 @@ namespace Educadev.Functions
             var query = new TableQuery<Plan>().Where(TableQuery.CombineFilters(
                 TableQuery.GenerateFilterCondition("PartitionKey", "eq", dsp.PartitionKey),
                 "and",
-                TableQuery.GenerateFilterConditionForDate("Date", "eq", date)
+                TableQuery.GenerateFilterConditionForDate("Date", "eq", date.AddHours(12))
             ));
             var plans = await plansTable.ExecuteQueryAsync(query);
             if (plans.Any())
@@ -130,6 +133,7 @@ namespace Educadev.Functions
                 Channel = proposalPayload.Channel.Id,
 
                 Name = proposalPayload.GetValue("name"),
+                Part = 1,
                 Url = proposalPayload.GetValue("url"),
                 Notes = proposalPayload.GetValue("notes")
             };
@@ -143,7 +147,8 @@ namespace Educadev.Functions
                     new MessageAttachment {
                         Title = proposal.GetFormattedTitle(),
                         Text = proposal.Notes,
-                        Footer = "Utilisez /edu:list pour voir toutes les propositions"
+                        Footer = "Utilisez /edu:list pour voir toutes les propositions",
+                        Color = "#1d7c00"
                     }
                 }
             });
@@ -157,7 +162,7 @@ namespace Educadev.Functions
             var videoKey = planPayload.GetValue("video");
             if (!string.IsNullOrWhiteSpace(videoKey))
             {
-                var proposal = await proposals.Retrieve<Proposal>(planPayload.PartitionKey, videoKey);
+                var proposal = await proposals.Retrieve<Proposal>(planPayload.State, videoKey);
                 if (proposal == null)
                 {
                     return Utils.Ok(new SlackMessage {
@@ -168,7 +173,7 @@ namespace Educadev.Functions
 
                 if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
                 {
-                    var otherPlan = await plans.Retrieve<Plan>(planPayload.PartitionKey, proposal.PlannedIn);
+                    var otherPlan = await plans.Retrieve<Plan>(planPayload.State, proposal.PlannedIn);
                     if (otherPlan != null)
                     {
                         return Utils.Ok(new SlackMessage {
@@ -188,12 +193,12 @@ namespace Educadev.Functions
             }
 
             var plan = new Plan {
-                PartitionKey = planPayload.PartitionKey,
+                PartitionKey = planPayload.State,
                 RowKey = planPayload.ActionTimestamp,
                 CreatedBy = planPayload.User.Id,
                 Team = planPayload.Team.Id,
-                Channel = planPayload.Channel.Id,
-                Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal),
+                Channel = Utils.GetChannelFromPartitionKey(planPayload.State),
+                Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal).AddHours(12),
                 Owner = planPayload.GetValue("owner"),
                 Video = videoKey
             };
@@ -207,7 +212,7 @@ namespace Educadev.Functions
 
             var message = new PostMessageRequest {
                 Text = $"<@{planPayload.User.Id}> vient de planifier un Lunch & Watch :",
-                Channel = planPayload.Channel.Id,
+                Channel = Utils.GetChannelFromPartitionKey(planPayload.State),
                 Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
             };
 
@@ -224,7 +229,7 @@ namespace Educadev.Functions
 
             if (action.Name == "volunteer")
             {
-                if (plan.Owner != null)
+                if (!string.IsNullOrWhiteSpace(plan.Owner))
                 {
                     var message = new PostEphemeralRequest {
                         User = payload.User.Id,
@@ -247,7 +252,7 @@ namespace Educadev.Functions
                     await MessageHelpers.PostErrorMessage(payload);
                     return await UpdatePlanMessage(binder, payload, plan, "");
                 }
-                
+
                 return await UpdatePlanMessage(binder, payload, plan, "Merci!");
             }
 
@@ -289,49 +294,114 @@ namespace Educadev.Functions
         {
             var proposals = await binder.GetTable("proposals");
             var action = payload.Actions.First();
-            var proposal = await proposals.Retrieve<Proposal>(payload.PartitionKey, action.Value);
 
             if (action.Name == "delete")
             {
-                // Bloquer la suppression d'une proposition plannifiée
-                if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
+                var proposal = await proposals.Retrieve<Proposal>(payload.PartitionKey, action.Value);
+                return await DeleteProposal(binder, payload, proposal);
+            }
+
+            if (action.Name == "done" || action.Name == "incomplete")
+            {
+                var proposalIdentifier = action.Value.Split('/');
+                var proposal = await proposals.Retrieve<Proposal>(proposalIdentifier[0], proposalIdentifier[1]);
+
+                if (action.Name == "incomplete")
                 {
-                    var plan = await binder.GetTableRow<Plan>("plans", payload.PartitionKey, proposal.PlannedIn);
-                    if (plan != null)
-                    {
-                        return Utils.Ok(new SlackMessage {
-                            Text = $"Ce vidéo est déjà planifié pour le {plan.Date:dddd d MMMM}.",
-                            Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
-                        });
-                    }
+                    var newProposal = new Proposal {
+                        PartitionKey = proposal.PartitionKey,
+                        RowKey = payload.MessageTimestamp,
+
+                        ProposedBy = proposal.ProposedBy,
+                        Team = proposal.Team,
+                        Channel = proposal.Channel,
+
+                        Name = proposal.Name,
+                        Part = proposal.Part + 1,
+                        Url = proposal.Url,
+                        Notes = proposal.Notes
+                    };
+
+                    await proposals.ExecuteAsync(TableOperation.Insert(newProposal));
                 }
 
-                var result = await proposals.ExecuteAsync(TableOperation.Delete(proposal));
-                if (result.IsError())
-                {
-                    await MessageHelpers.PostErrorMessage(payload);
-                    return Utils.Ok();
-                }
-                
-                // Notifier le owner si c'est pas lui qui supprime sa proposition
-                if (proposal.ProposedBy != payload.User.Id)
-                {
-                    await SlackHelper.SlackPost("chat.postMessage", payload.Team.Id, new PostMessageRequest {
-                        Channel = proposal.ProposedBy,
-                        Text = $"<@{payload.User.Id}> vient de supprimer votre proposition de vidéo dans <#{payload.Channel.Id}>:",
-                        Attachments = { await MessageHelpers.GetProposalAttachment(binder, proposal, allowActions: false) }
-                    });
-                }
-                
-                // NOTE: Présentement la seule place qu'on peut supprimer une proposition c'est à partir de la liste de toutes les propositions.
-                // Si ça change, va falloir ajouter plus de logique ici pour recréer le bon type de message.
-                var allProposals = await proposals.GetAllByPartition<Proposal>(proposal.PartitionKey);
-                var message = await MessageHelpers.GetListMessage(binder, allProposals, payload.Channel.Id);
-                message.ReplaceOriginal = true;
-                return Utils.Ok(message);
+                return Utils.Ok(new SlackMessage {
+                    Text = $"Souhaitez-vous planifier le prochain Lunch & Watch pour <#{proposal.Channel}>?",
+                    Attachments = {
+                        new MessageAttachment {
+                            CallbackId = "dialog_action",
+                            Actions = new List<MessageAction> {
+                                new MessageAction {Type = "button", Text = "Oui", Name = "plan", Value = proposal.PartitionKey},
+                                new MessageAction {Type = "button", Text = "Non merci", Name = "cancel"}
+                            }
+                        }
+                    },
+                    ReplaceOriginal = true
+                });
             }
 
             return Utils.Ok();
+        }
+
+        private static async Task<IActionResult> DeleteProposal(IBinder binder, InteractiveMessagePayload payload, Proposal proposal)
+        {
+            // Bloquer la suppression d'une proposition plannifiée
+            if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
+            {
+                var plan = await binder.GetTableRow<Plan>("plans", payload.PartitionKey, proposal.PlannedIn);
+                if (plan != null)
+                {
+                    return Utils.Ok(new SlackMessage {
+                        Text = $"Ce vidéo est déjà planifié pour le {plan.Date:dddd d MMMM}.",
+                        Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                    });
+                }
+            }
+            
+            var proposals = await binder.GetTable("proposals");
+            var result = await proposals.ExecuteAsync(TableOperation.Delete(proposal));
+            if (result.IsError())
+            {
+                await MessageHelpers.PostErrorMessage(payload);
+                return Utils.Ok();
+            }
+
+            // Notifier le owner si c'est pas lui qui supprime sa proposition
+            if (proposal.ProposedBy != payload.User.Id)
+            {
+                await SlackHelper.SlackPost("chat.postMessage", payload.Team.Id, new PostMessageRequest {
+                    Channel = proposal.ProposedBy,
+                    Text = $"<@{payload.User.Id}> vient de supprimer votre proposition de vidéo dans <#{payload.Channel.Id}>:",
+                    Attachments = {await MessageHelpers.GetProposalAttachment(binder, proposal, allowActions: false)}
+                });
+            }
+
+            // NOTE: Présentement la seule place qu'on peut supprimer une proposition c'est à partir de la liste de toutes les propositions.
+            // Si ça change, va falloir ajouter plus de logique ici pour recréer le bon type de message.
+            var allProposals = await ProposalHelpers.GetActiveProposals(proposals, proposal.PartitionKey);
+            var message = await MessageHelpers.GetListMessage(binder, allProposals, payload.Channel.Id);
+            message.ReplaceOriginal = true;
+            return Utils.Ok(message);
+        }
+
+        private static async Task<IActionResult> ProcessDialogAction(IBinder binder, InteractiveMessagePayload payload)
+        {
+            var action = payload.Actions.First();
+
+            if (action.Name == "plan")
+            {
+                var dialogRequest = new OpenDialogRequest {
+                    TriggerId = payload.TriggerId,
+                    Dialog = await DialogHelpers.GetPlanDialog(binder, action.Value)
+                };
+
+                await SlackHelper.SlackPost("dialog.open", payload.Team.Id, dialogRequest);
+            }
+
+            // NOTE: Présentement toutes les dialog_actions suppriment le message original
+            return Utils.Ok(new SlackMessage {
+                DeleteOriginal = true
+            });
         }
     }
 }

@@ -95,7 +95,5 @@ namespace Educadev.Helpers
 
             return payload;
         }
-
-        public static string GetPartitionKey(string team, string channel) => $"{team}:{channel}";
     }
 }

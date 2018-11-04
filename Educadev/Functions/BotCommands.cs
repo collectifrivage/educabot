@@ -33,7 +33,7 @@ namespace Educadev.Functions
 
             var dialogRequest = new OpenDialogRequest {
                 TriggerId = parameters["trigger_id"],
-                Dialog = GetProposeDialog(defaultName: parameters["text"])
+                Dialog = DialogHelpers.GetProposeDialog(defaultName: parameters["text"])
             };
 
             await SlackHelper.SlackPost("dialog.open", parameters["team_id"], dialogRequest);
@@ -52,9 +52,8 @@ namespace Educadev.Functions
 
             var team = parameters["team_id"];
             var channel = parameters["channel_id"];
-
-            var allProposals = await proposalsTable.GetAllByPartition<Proposal>(SlackHelper.GetPartitionKey(team, channel));
-
+            
+            var allProposals = await ProposalHelpers.GetActiveProposals(proposalsTable, Utils.GetPartitionKey(team, channel));
             var message = await MessageHelpers.GetListMessage(binder, allProposals, channel);
 
             return Utils.Ok(message);
@@ -64,16 +63,15 @@ namespace Educadev.Functions
         public static async Task<IActionResult> OnPlan(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/plan")] HttpRequest req,
             [Table("proposals")] CloudTable proposalsTable,
-            ILogger log)
+            ILogger log, IBinder binder)
         {
             var body = await SlackHelper.ReadSlackRequest(req);
             var parameters = SlackHelper.ParseBody(body);
-            
-            var allProposals = await proposalsTable.GetAllByPartition<Proposal>(SlackHelper.GetPartitionKey(parameters["team_id"], parameters["channel_id"]));
+            var partitionKey = Utils.GetPartitionKey(parameters["team_id"], parameters["channel_id"]);
 
             var dialogRequest = new OpenDialogRequest {
                 TriggerId = parameters["trigger_id"],
-                Dialog = GetPlanDialog(allProposals, defaultDate: parameters["text"])
+                Dialog = await DialogHelpers.GetPlanDialog(binder, partitionKey, defaultDate: parameters["text"])
             };
 
             await SlackHelper.SlackPost("dialog.open", parameters["team_id"], dialogRequest);
@@ -89,14 +87,14 @@ namespace Educadev.Functions
         {
             var body = await SlackHelper.ReadSlackRequest(req);
             var parameters = SlackHelper.ParseBody(body);
-            var partitionKey = SlackHelper.GetPartitionKey(parameters["team_id"], parameters["channel_id"]);
+            var partitionKey = Utils.GetPartitionKey(parameters["team_id"], parameters["channel_id"]);
 
             var futurePlansQuery = new TableQuery<Plan>()
                 .Where(
                     TableQuery.CombineFilters(
                         TableQuery.GenerateFilterCondition("PartitionKey", "eq", partitionKey),
                         "and",
-                        TableQuery.GenerateFilterConditionForDate("Date", "gt", DateTime.Now))
+                        TableQuery.GenerateFilterConditionForDate("Date", "ge", DateTime.Now))
                 );
             var futurePlans = await plansTable.ExecuteQueryAsync(futurePlansQuery);
 
@@ -111,66 +109,6 @@ namespace Educadev.Functions
             message.Attachments.Add(MessageHelpers.GetRemoveMessageAttachment());
 
             return Utils.Ok(message);
-        }
-
-        private static Dialog GetProposeDialog(string defaultName)
-        {
-            return new Dialog {
-                CallbackId = "propose",
-                Title = "Proposer un vidéo",
-                SubmitLabel = "Proposer",
-                Elements = new List<DialogElement> {
-                    new TextDialogElement("name", "Nom du vidéo") {
-                        MaxLength = 40,
-                        Placeholder = "How to use a computer",
-                        DefaultValue = defaultName
-                    },
-                    new TextDialogElement("url", "URL vers la vidéo") {
-                        Subtype = "url",
-                        Placeholder = "http://example.com/my-awesome-video",
-                        Hint = @"Si le vidéo est sur le réseau, inscrivez le chemin vers le fichier partagé, débutant par \\"
-                    },
-                    new TextareaDialogElement("notes", "Notes") {
-                        Optional = true
-                    }
-                }
-            };
-        }
-
-        private static Dialog GetPlanDialog(IList<Proposal> allProposals, string defaultDate)
-        {
-            var dialog = new Dialog {
-                CallbackId = "plan",
-                Title = "Planifier un Lunch&Watch",
-                SubmitLabel = "Planifier",
-                Elements = new List<DialogElement> {
-                    new TextDialogElement("date", "Date") {
-                        Hint = "Au format AAAA-MM-JJ",
-                        DefaultValue = defaultDate
-                    },
-                    new SelectDialogElement("owner", "Responsable") {
-                        Optional = true,
-                        DataSource = "users",
-                        Hint = "Si non choisi, le bot va demander un volontaire."
-                    }
-                }
-            };
-
-            if (allProposals.Any())
-            {
-                dialog.Elements.Add(new SelectDialogElement("video", "Vidéo") {
-                    Optional = true,
-                    Options = allProposals
-                        .Where(x => string.IsNullOrWhiteSpace(x.PlannedIn))
-                        .Select(x => new SelectOption {
-                            Label = x.Name,
-                            Value = x.RowKey
-                        }).ToArray(),
-                    Hint = "Si non choisi, le bot va faire voter le channel."
-                });
-            }
-
-            return dialog;
         }
     }
 }

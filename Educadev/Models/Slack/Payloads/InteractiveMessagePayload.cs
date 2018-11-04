@@ -15,6 +15,9 @@ namespace Educadev.Models.Slack.Payloads
         [JsonProperty("original_message")]
         public SlackMessage OriginalMessage { get; set; }
 
+        [JsonProperty("trigger_id")]
+        public string TriggerId { get; set; }
+
         public class Action
         {
             [JsonProperty("name")]

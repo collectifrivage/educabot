@@ -25,6 +25,6 @@ namespace Educadev.Models.Slack.Payloads
         [JsonProperty("channel")]
         public SlackChannel Channel { get; set; }
 
-        public string PartitionKey => SlackHelper.GetPartitionKey(Team.Id, Channel.Id);
+        public string PartitionKey => Utils.GetPartitionKey(Team.Id, Channel.Id);
     }
 }

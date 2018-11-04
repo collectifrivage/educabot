@@ -90,7 +90,7 @@ namespace Educadev.Helpers
                 AuthorName = $"Proposé par <@{proposal.ProposedBy}>",
                 Title = proposal.GetFormattedTitle(),
                 Text = proposal.Notes,
-                Color = "#1d7c00",
+                Color = "#1d7c00"
             };
 
             if (allowActions)
