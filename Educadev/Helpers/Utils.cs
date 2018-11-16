@@ -21,6 +21,8 @@ namespace Educadev.Helpers
         }
 
         public static string GetPartitionKey(string team, string channel) => $"{team}:{channel}";
+        public static string GetPartitionKey(string team, string channel, string addon) => GetPartitionKeyWithAddon(GetPartitionKey(team, channel), addon);
+        public static string GetPartitionKeyWithAddon(string partitionKey, string addon) => $"{partitionKey}:{addon}";
         public static string GetChannelFromPartitionKey(string partitionKey) => partitionKey.Split(':')[1];
     }
 }

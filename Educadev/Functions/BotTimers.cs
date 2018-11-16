@@ -133,6 +133,16 @@ namespace Educadev.Functions
             }
         }
 
+        [FunctionName("PublishVote")]
+        public static async Task PublishVote(
+            [TimerTrigger("0 15 9 * * 1-5")] TimerInfo timer, // 9:15AM monday-friday
+            [Table("plans")] CloudTable plansTable)
+        {
+            // TODO Lundi: Initier le vote pour les vidéos de cette semaine (sauf si aujourd'hui)
+            // TODO Vendredi: Initier le vote pour les vidéos de lundi prochain
+            // TODO Tous les jours: Rappel du vote pour les vidéos d'aujourd'hui même
+        }
+
         private static async Task<IList<Plan>> GetTodayPlansWithoutResponsible(CloudTable plansTable)
         {
             var query = new TableQuery<Plan>()

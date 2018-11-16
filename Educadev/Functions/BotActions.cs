@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Educadev.Helpers;
+using Educadev.Models.Exceptions;
 using Educadev.Models.Slack;
 using Educadev.Models.Slack.Dialogs;
 using Educadev.Models.Slack.Messages;
@@ -16,6 +17,7 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Table;
+using PostEphemeralRequest = Educadev.Models.Slack.Messages.PostEphemeralRequest;
 
 namespace Educadev.Functions
 {
@@ -50,7 +52,14 @@ namespace Educadev.Functions
                     var result = await ValidatePlan(binder, dsp);
                     if (!result.Valid) return Utils.Ok(result);
 
-                    return await RecordPlan(binder, dsp);
+                    await RecordPlan(binder, dsp);
+                }
+                else if (dsp.CallbackId == "vote")
+                {
+                    var result = ValidateVotes(dsp);
+                    if (!result.Valid) return Utils.Ok(result);
+
+                    await RecordVotes(binder, dsp);
                 }
             }
             else if (payload is InteractiveMessagePayload imp)
@@ -118,6 +127,21 @@ namespace Educadev.Functions
             return response;
         }
 
+        private static SlackErrorsResponse ValidateVotes(DialogSubmissionPayload dsp)
+        {
+            var response = new SlackErrorsResponse();
+
+            var votes = new HashSet<string> {dsp.Submission["proposal1"]};
+
+            var proposal2 = dsp.Submission["proposal2"];
+            if (!string.IsNullOrWhiteSpace(proposal2) && !votes.Add(proposal2)) response.AddError("proposal2", "Vous ne pouvez-pas voter deux fois pour le même vidéo.");
+            
+            var proposal3 = dsp.Submission["proposal3"];
+            if (!string.IsNullOrWhiteSpace(proposal3) && !votes.Add(proposal3)) response.AddError("proposal3", "Vous ne pouvez-pas voter deux fois pour le même vidéo.");
+
+            return response;
+        }
+
         
 
         private static async Task RecordProposal(IBinder binder, DialogSubmissionPayload proposalPayload)
@@ -154,7 +178,7 @@ namespace Educadev.Functions
             });
         }
 
-        private static async Task<IActionResult> RecordPlan(IBinder binder, DialogSubmissionPayload planPayload)
+        private static async Task RecordPlan(IBinder binder, DialogSubmissionPayload planPayload)
         {
             var plans = await binder.GetTable("plans");
             var proposals = await binder.GetTable("proposals");
@@ -165,10 +189,8 @@ namespace Educadev.Functions
                 var proposal = await proposals.Retrieve<Proposal>(planPayload.State, videoKey);
                 if (proposal == null)
                 {
-                    return Utils.Ok(new SlackMessage {
-                        Text = "Vidéo non trouvé",
-                        Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
-                    });
+                    await MessageHelpers.PostErrorMessage(planPayload, "Vidéo non trouvé");
+                    return;
                 }
 
                 if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
@@ -176,9 +198,8 @@ namespace Educadev.Functions
                     var otherPlan = await plans.Retrieve<Plan>(planPayload.State, proposal.PlannedIn);
                     if (otherPlan != null)
                     {
-                        return Utils.Ok(new SlackMessage {
-                            Text = $"Ce vidéo est déjà planifié pour le {otherPlan.Date:dddd d MMMM}."
-                        });
+                        await MessageHelpers.PostErrorMessage(planPayload, $"Ce vidéo est déjà planifié pour le {otherPlan.Date:dddd d MMMM}.");
+                        return;
                     }
                 }
 
@@ -188,7 +209,7 @@ namespace Educadev.Functions
                 if (proposalResult.IsError())
                 {
                     await MessageHelpers.PostErrorMessage(planPayload);
-                    return Utils.Ok();
+                    return;
                 }
             }
 
@@ -207,7 +228,7 @@ namespace Educadev.Functions
             if (result.IsError())
             {
                 await MessageHelpers.PostErrorMessage(planPayload);
-                return Utils.Ok();
+                return;
             }
 
             var message = new PostMessageRequest {
@@ -217,8 +238,42 @@ namespace Educadev.Functions
             };
 
             await SlackHelper.SlackPost("chat.postMessage", planPayload.Team.Id, message);
-            return Utils.Ok();
         }
+
+        private static async Task RecordVotes(IBinder binder, DialogSubmissionPayload payload)
+        {
+            var votesTable = await binder.GetTable("votes");
+            var plansTable = await binder.GetTable("plans");
+
+            var vote = await votesTable.Retrieve<Vote>(Utils.GetPartitionKeyWithAddon(payload.PartitionKey, payload.State), payload.User.Id)
+                       ?? new Vote(payload.Team.Id, payload.Channel.Id, payload.State, payload.User.Id);
+
+            vote.Proposal1 = payload.Submission["proposal1"];
+            vote.Proposal2 = payload.Submission["proposal2"];
+            vote.Proposal3 = payload.Submission["proposal3"];
+
+            var result = await votesTable.ExecuteAsync(TableOperation.InsertOrReplace(vote));
+            if (result.IsError())
+            {
+                await MessageHelpers.PostErrorMessage(payload);
+                return;
+            }
+
+            // TODO: Afficher les résultats en temps réel?
+
+            var plan = await plansTable.Retrieve<Plan>(payload.PartitionKey, payload.State);
+
+            var message = new PostEphemeralRequest {
+                User = payload.User.Id,
+                Channel = payload.Channel.Id,
+                Text = $"Merci! Vos votes pour le plan du {plan.Date:d MMMM} ont bien été reçus.",
+                Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+            };
+
+            await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, message);
+        }
+
+
 
         private static async Task<IActionResult> ProcessPlanAction(IBinder binder, InteractiveMessagePayload payload)
         {
@@ -254,6 +309,26 @@ namespace Educadev.Functions
                 }
 
                 return await UpdatePlanMessage(binder, payload, plan, "Merci!");
+            }
+
+            if (action.Name == "vote")
+            {
+                try
+                {
+                    var dialogRequest = new OpenDialogRequest {
+                        TriggerId = payload.TriggerId,
+                        Dialog = await DialogHelpers.GetVoteDialog(binder, payload.PartitionKey, action.Value, payload.User.Id)
+                    };
+
+                    await SlackHelper.SlackPost("dialog.open", payload.Team.Id, dialogRequest);
+                }
+                catch (NoAvailableVideosException)
+                {
+                    return Utils.Ok(new SlackMessage {
+                        Text = "Oups! Aucun vidéo n'a été proposé. Proposez un vidéo avec /edu:propose.",
+                        Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                    });
+                }
             }
 
             return Utils.Ok();

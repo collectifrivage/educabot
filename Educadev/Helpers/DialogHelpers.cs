@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Educadev.Models.Exceptions;
 using Educadev.Models.Slack.Dialogs;
 using Educadev.Models.Tables;
 using Microsoft.Azure.WebJobs;
@@ -69,6 +70,45 @@ namespace Educadev.Helpers
                     Hint = "Si non choisi, le bot va faire voter le channel."
                 });
             }
+
+            return dialog;
+        }
+
+        public static async Task<Dialog> GetVoteDialog(IBinder binder, string partitionKey, string planId, string userId)
+        {
+            var vote = await binder.GetTableRow<Vote>("votes", Utils.GetPartitionKeyWithAddon(partitionKey, planId), userId);
+            
+            var proposalsTable = await binder.GetTable("proposals");
+            var allProposals = await ProposalHelpers.GetActiveProposals(proposalsTable, partitionKey);
+            var choices = allProposals.Select(x => new SelectOption {
+                Label = x.Name,
+                Value = x.RowKey
+            }).ToArray();
+
+            if (!choices.Any()) throw new NoAvailableVideosException();
+
+            var dialog = new Dialog {
+                CallbackId = "vote",
+                Title = "Qu'est-ce qu'on écoute?",
+                SubmitLabel = "Voter",
+                State = planId,
+                Elements = new List<DialogElement> {
+                    new SelectDialogElement("proposal1", "Premier choix") {
+                        Options = choices,
+                        DefaultValue = vote?.Proposal1
+                    },
+                    new SelectDialogElement("proposal2", "Deuxième choix") {
+                        Options = choices,
+                        Optional = true,
+                        DefaultValue = vote?.Proposal2
+                    },
+                    new SelectDialogElement("proposal3", "Troisième choix") {
+                        Options = choices,
+                        Optional = true,
+                        DefaultValue = vote?.Proposal3
+                    }
+                }
+            };
 
             return dialog;
         }

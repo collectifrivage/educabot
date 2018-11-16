@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Educadev.Models.Slack.Messages;
@@ -65,7 +66,7 @@ namespace Educadev.Helpers
 
             if (string.IsNullOrWhiteSpace(plan.Owner))
             {
-                result.Actions = new List<MessageAction> {
+                result.Actions.Add(
                     new MessageAction {
                         Type = "button",
                         Name = "volunteer",
@@ -78,7 +79,18 @@ namespace Educadev.Helpers
                             DismissText = "Oups, non"
                         }
                     }
-                };
+                );
+            }
+
+            if (string.IsNullOrWhiteSpace(plan.Video) && plan.Date <= DateTime.Now.AddDays(7))
+            {
+                result.Actions.Add(
+                    new MessageAction {
+                        Type = "button",
+                        Name="vote",
+                        Value = plan.RowKey,
+                        Text = "Voter pour le vidéo"
+                    });
             }
 
             return result;
@@ -141,12 +153,12 @@ namespace Educadev.Helpers
             };
         }
 
-        public static async Task PostErrorMessage(Payload payload)
+        public static async Task PostErrorMessage(Payload payload, string messageText = "Oups! Il y a eu un problème. Ré-essayez ?")
         {
             var message = new PostEphemeralRequest {
                 User = payload.User.Id,
                 Channel = payload.Channel.Id,
-                Text = "Oups! Il y a eu un problème. Ré-essayez ?",
+                Text = messageText,
                 Attachments = {GetRemoveMessageAttachment()}
             };
 

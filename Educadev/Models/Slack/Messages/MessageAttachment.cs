@@ -37,9 +37,9 @@ namespace Educadev.Models.Slack.Messages
 
         [JsonProperty("callback_id")]
         public string CallbackId { get; set; }
-        
+
         [JsonProperty("actions")]
-        public List<MessageAction> Actions { get; set; }
+        public List<MessageAction> Actions { get; set; } = new List<MessageAction>();
 
         [JsonProperty("footer")]
         public string Footer { get; set; }
