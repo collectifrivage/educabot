@@ -212,7 +212,8 @@ namespace Educadev.Functions
         {
             var votes = await votesTable.GetAllByPartition<Vote>(
                 Utils.GetPartitionKeyWithAddon(plan.PartitionKey, plan.RowKey));
-
+            
+            var rng = new Random();
             var results = votes
                 .SelectMany(x => new[] {
                     new {video = x.Proposal1, score = 5},
@@ -222,11 +223,18 @@ namespace Educadev.Functions
                 .GroupBy(x => x.video)
                 .Select(g => new {video = g.Key, score = g.Sum(x => x.score), count = g.Count()})
                 .OrderByDescending(x => x.score)
+                .ThenBy(x => rng.Next())
                 .ToList();
 
             if (!results.Any())
             {
-                // TODO: Voir comment on gère cette situation.
+                await plansTable.ExecuteAsync(TableOperation.Delete(plan));
+
+                var failMessage = new PostMessageRequest {
+                    Channel = plan.Channel,
+                    Text = "Comme personne n'a voté pour le Lunch & Watch de ce midi, ce dernier a été annulé."
+                };
+                await SlackHelper.SlackPost("chat.postMessage", plan.Team, failMessage);
                 return;
             }
 
@@ -251,6 +259,13 @@ namespace Educadev.Functions
                     }
                 ).ToList()
             };
+
+            if (results.Count > 1 && results[0].score == results[1].score)
+            {
+                message.Attachments.Add(new MessageAttachment {
+                    Text = "Note: comme il y avait égalité pour la première position, l'ordre a été déterminé au hasard."
+                });
+            }
 
             await SlackHelper.SlackPost("chat.postMessage", plan.Team, message);
 
