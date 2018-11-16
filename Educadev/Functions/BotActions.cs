@@ -23,17 +23,14 @@ namespace Educadev.Functions
 {
     public static class BotActions
     {
-        static BotActions()
-        {
-            CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
-        }
-
         [FunctionName("SlackAction")]
         public static async Task<IActionResult> DispatchAction(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/action-endpoint")] HttpRequest req, 
             IBinder binder,
             ILogger log)
         {
+            Utils.SetCulture();
+
             var body = await SlackHelper.ReadSlackRequest(req);
             var parameters = SlackHelper.ParseBody(body);
             var payload = SlackHelper.DecodePayload(parameters["payload"]);

@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Educadev.Helpers;
@@ -18,16 +16,13 @@ namespace Educadev.Functions
 {
     public static class BotCommands
     {
-        static BotCommands()
-        {
-            CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
-        }
-
         [FunctionName("SlackCommandPropose")]
         public static async Task<IActionResult> OnPropose(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/propose")] HttpRequest req,
             ILogger log)
         {
+            Utils.SetCulture();
+
             var body = await SlackHelper.ReadSlackRequest(req);
             var parameters = SlackHelper.ParseBody(body);
 
@@ -47,6 +42,8 @@ namespace Educadev.Functions
             [Table("proposals")] CloudTable proposalsTable,
             ILogger log, IBinder binder)
         {
+            Utils.SetCulture();
+
             var body = await SlackHelper.ReadSlackRequest(req);
             var parameters = SlackHelper.ParseBody(body);
 
@@ -65,6 +62,8 @@ namespace Educadev.Functions
             [Table("proposals")] CloudTable proposalsTable,
             ILogger log, IBinder binder)
         {
+            Utils.SetCulture();
+
             var body = await SlackHelper.ReadSlackRequest(req);
             var parameters = SlackHelper.ParseBody(body);
             var partitionKey = Utils.GetPartitionKey(parameters["team_id"], parameters["channel_id"]);
@@ -85,6 +84,8 @@ namespace Educadev.Functions
             [Table("plans")] CloudTable plansTable,
             ILogger log, IBinder binder)
         {
+            Utils.SetCulture();
+
             var body = await SlackHelper.ReadSlackRequest(req);
             var parameters = SlackHelper.ParseBody(body);
             var partitionKey = Utils.GetPartitionKey(parameters["team_id"], parameters["channel_id"]);

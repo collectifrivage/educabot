@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Educadev.Helpers;
@@ -13,17 +12,14 @@ namespace Educadev.Functions
 {
     public static class BotTimers
     {
-        static BotTimers()
-        {
-            CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
-        }
-        
         [FunctionName("PlanResponsibleReminder")]
         public static async Task PlanResponsibleSecondReminder(
             [TimerTrigger("0 0 11 * * *")] TimerInfo timer, // 11AM daily
             [Table("plans")] CloudTable plansTable,
             IBinder binder)
         {
+            Utils.SetCulture();
+
             var plans = await GetTodayPlansWithoutResponsible(plansTable);
 
             foreach (var plan in plans)
@@ -42,6 +38,8 @@ namespace Educadev.Functions
             [Table("plans")] CloudTable plansTable,
             IBinder binder)
         {
+            Utils.SetCulture();
+
             var plans = await GetTodayPlansWithoutResponsible(plansTable);
 
             foreach (var plan in plans)
@@ -61,6 +59,8 @@ namespace Educadev.Functions
             [Table("proposals")] CloudTable proposalsTable,
             IBinder binder)
         {
+            Utils.SetCulture();
+
             var plans = await GetTodayPlansWithoutResponsible(plansTable);
 
             foreach (var plan in plans)
@@ -91,6 +91,8 @@ namespace Educadev.Functions
             [Table("plans")] CloudTable plansTable,
             [Table("proposals")] CloudTable proposalsTable)
         {
+            Utils.SetCulture();
+
             var plans = await GetTodayPlansWithVideoAndResponsible(plansTable);
 
             foreach (var plan in plans)
@@ -122,6 +124,8 @@ namespace Educadev.Functions
             [Table("plans")] CloudTable plansTable,
             IBinder binder)
         {
+            Utils.SetCulture();
+
             var today = DateTime.Today;
             var withoutVideo = TableQuery.GenerateFilterCondition("Video", "eq", "");
 
@@ -182,6 +186,8 @@ namespace Educadev.Functions
             [Table("votes")] CloudTable votesTable,
             [Table("proposals")] CloudTable proposalsTable)
         {
+            Utils.SetCulture();
+
             var today = DateTime.Today;
             var withoutVideo = TableQuery.GenerateFilterCondition("Video", "eq", "");
             

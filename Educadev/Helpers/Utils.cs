@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Newtonsoft.Json;
@@ -24,5 +25,10 @@ namespace Educadev.Helpers
         public static string GetPartitionKey(string team, string channel, string addon) => GetPartitionKeyWithAddon(GetPartitionKey(team, channel), addon);
         public static string GetPartitionKeyWithAddon(string partitionKey, string addon) => $"{partitionKey}:{addon}";
         public static string GetChannelFromPartitionKey(string partitionKey) => partitionKey.Split(':')[1];
+
+        public static void SetCulture()
+        {
+            CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
+        }
     }
 }
