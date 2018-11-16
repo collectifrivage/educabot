@@ -17,26 +17,8 @@ namespace Educadev.Functions
         {
             CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
         }
-
-        [FunctionName("PlanResponsibleFirstReminder")]
-        public static async Task PlanResponsibleFirstReminder(
-            [TimerTrigger("0 0 9 * * *")] TimerInfo timer, // 9AM daily
-            [Table("plans")] CloudTable plansTable,
-            IBinder binder)
-        {
-            var plans = await GetTodayPlansWithoutResponsible(plansTable);
-
-            foreach (var plan in plans)
-            {
-                await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
-                    Channel = plan.Channel,
-                    Text = "Le Lunch & Watch de ce midi a besoin d'un responsable!",
-                    Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
-                });
-            }
-        }
-
-        [FunctionName("PlanResponsibleSecondReminder")]
+        
+        [FunctionName("PlanResponsibleReminder")]
         public static async Task PlanResponsibleSecondReminder(
             [TimerTrigger("0 0 11 * * *")] TimerInfo timer, // 11AM daily
             [Table("plans")] CloudTable plansTable,
@@ -136,7 +118,7 @@ namespace Educadev.Functions
 
         [FunctionName("PlanReminder")]
         public static async Task PlanReminder(
-            [TimerTrigger("0 15 9 * * *")] TimerInfo timer, // 9:15AM daily
+            [TimerTrigger("0 0 9 * * *")] TimerInfo timer, // 9:00AM daily
             [Table("plans")] CloudTable plansTable,
             IBinder binder)
         {
@@ -174,6 +156,8 @@ namespace Educadev.Functions
                     message = "Rappel: Il y a un Lunch & Watch ce midi!";
                     if (string.IsNullOrWhiteSpace(plan.Video))
                         message += " Votez pour le vidéo si ce n'est pas déjà fait! Vous avez jusqu'à 11h15 pour choisir.";
+                    if (string.IsNullOrWhiteSpace(plan.Owner))
+                        message += "\n\nIl n'y a pas encore de responsable pour préparer le vidéo. Cliquez sur _Je m'en occupe_ pour vous porter volontaire!";
                 }
                 else
                 {
