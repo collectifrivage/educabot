@@ -133,14 +133,61 @@ namespace Educadev.Functions
             }
         }
 
-        [FunctionName("PublishVote")]
-        public static async Task PublishVote(
+        [FunctionName("PlanReminder")]
+        public static async Task PlanReminder(
             [TimerTrigger("0 15 9 * * 1-5")] TimerInfo timer, // 9:15AM monday-friday
-            [Table("plans")] CloudTable plansTable)
+            [Table("plans")] CloudTable plansTable,
+            IBinder binder)
         {
-            // TODO Lundi: Initier le vote pour les vidéos de cette semaine (sauf si aujourd'hui)
-            // TODO Vendredi: Initier le vote pour les vidéos de lundi prochain
-            // TODO Tous les jours: Rappel du vote pour les vidéos d'aujourd'hui même
+            var today = DateTime.Today;
+            var withoutVideo = TableQuery.GenerateFilterCondition("Video", "eq", "");
+
+            // Lundi: Initier le vote pour les vidéos de cette semaine (sauf si aujourd'hui)
+            if (today.DayOfWeek == DayOfWeek.Monday)
+            {
+                var weeksPlans = await PlanHelpers.GetPlansBetween(plansTable, today.AddDays(1), today.AddDays(5), withoutVideo);
+                foreach (var plan in weeksPlans)
+                    await SendMessage(plan);
+            }
+            // Vendredi: Initier le vote pour les vidéos de lundi prochain
+            if (today.DayOfWeek == DayOfWeek.Friday)
+            {
+                var mondaysPlans = await PlanHelpers.GetPlansForDate(plansTable, today.AddDays(3), withoutVideo);
+                foreach (var plan in mondaysPlans)
+                    await SendMessage(plan);
+            }
+
+            // Rappel du lunch & watch d'aujourd'hui
+            var todaysPlans = await PlanHelpers.GetPlansForDate(plansTable, today);
+            foreach (var plan in todaysPlans)
+                await SendMessage(plan);
+
+            async Task SendMessage(Plan plan)
+            {
+                var isToday = plan.Date.Date == today;
+
+                string message = null;
+
+                if (isToday)
+                {
+                    message = "Rappel: Il y a un Lunch & Watch ce midi!";
+                    if (string.IsNullOrWhiteSpace(plan.Video))
+                        message += " Votez pour le vidéo si ce n'est pas déjà fait! Vous avez jusqu'à 11h15 pour choisir.";
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(plan.Video))
+                        message = "C'est le moment de voter pour le vidéo de ce Lunch & Watch :";
+                }
+
+                if (string.IsNullOrWhiteSpace(message)) return;
+
+                await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
+                    Channel = plan.Channel,
+                    Text = message,
+                    Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
+                });
+            }
         }
 
         private static async Task<IList<Plan>> GetTodayPlansWithoutResponsible(CloudTable plansTable)

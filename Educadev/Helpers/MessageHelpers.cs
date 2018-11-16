@@ -91,6 +91,8 @@ namespace Educadev.Helpers
                         Value = plan.RowKey,
                         Text = "Voter pour le vidéo"
                     });
+
+                result.Footer = $"Le vote se termine le {plan.Date:d MMMM} à 11h15.";
             }
 
             return result;
