@@ -267,32 +267,19 @@ namespace Educadev.Functions
 
         private static async Task<IList<Plan>> GetTodayPlansWithoutResponsible(CloudTable plansTable)
         {
-            var query = new TableQuery<Plan>()
-                .Where(TableQuery.CombineFilters(
-                    TableQuery.GenerateFilterConditionForDate("Date", "eq", DateTime.Today.AddHours(12)),
-                    "and",
-                    TableQuery.GenerateFilterCondition("Owner", "eq", null)
-                ));
-
-            var plans = await plansTable.ExecuteQueryAsync(query);
-            return plans;
+            var filter = TableQuery.GenerateFilterCondition("Owner", "eq", null);
+            return await PlanHelpers.GetPlansForDate(plansTable, DateTime.Today, filter);
         }
 
         private static async Task<IList<Plan>> GetTodayPlansWithVideoAndResponsible(CloudTable plansTable)
         {
-            var query = new TableQuery<Plan>()
-                .Where(TableQuery.CombineFilters(
-                    TableQuery.GenerateFilterConditionForDate("Date", "eq", DateTime.Today.AddHours(12)),
-                    "and",
-                    TableQuery.CombineFilters(
-                        TableQuery.GenerateFilterCondition("Owner", "ne", null),
-                        "and",
-                        TableQuery.GenerateFilterCondition("Video", "ne", null)
-                    )
-                ));
+            var filter = TableQuery.CombineFilters(
+                TableQuery.GenerateFilterCondition("Owner", "ne", null),
+                "and",
+                TableQuery.GenerateFilterCondition("Video", "ne", null)
+            );
 
-            var plans = await plansTable.ExecuteQueryAsync(query);
-            return plans;
+            return await PlanHelpers.GetPlansForDate(plansTable, DateTime.Today, filter);
         }
     }
 }
