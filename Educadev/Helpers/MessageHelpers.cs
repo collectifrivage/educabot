@@ -164,7 +164,7 @@ namespace Educadev.Helpers
                 Attachments = {GetRemoveMessageAttachment()}
             };
 
-            await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, message);
+            await SlackHelper.PostEphemeral(payload.Team.Id, message);
         }
     }
 }

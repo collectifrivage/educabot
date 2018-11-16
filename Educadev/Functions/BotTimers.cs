@@ -24,7 +24,7 @@ namespace Educadev.Functions
 
             foreach (var plan in plans)
             {
-                await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "<!channel> Rappel: Le Lunch & Watch de ce midi a besoin d'un responsable!",
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
@@ -44,7 +44,7 @@ namespace Educadev.Functions
 
             foreach (var plan in plans)
             {
-                await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "<!channel> *Dernier rappel*: Le Lunch & Watch de ce midi a besoin d'un responsable! Si personne ne se manifeste, l'événement sera annulé.",
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
@@ -78,7 +78,7 @@ namespace Educadev.Functions
                 var result = await plansTable.ExecuteAsync(TableOperation.Delete(plan));
                 if (result.IsError()) continue;
 
-                await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "Le Lunch & Watch de ce midi a été annulé car aucun responsable ne s'est manifesté."
                 });
@@ -102,7 +102,7 @@ namespace Educadev.Functions
                 proposal.Complete = true;
                 await proposalsTable.ExecuteAsync(TableOperation.Replace(proposal));
 
-                await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
                     Channel = plan.Owner,
                     Text = $"Avez-vous terminé l'écoute du vidéo _{proposal.Name}_?\nSi vous choisissez Non, alors le vidéo sera automatiquement re-proposé pour le continuer plus tard.",
                     Attachments = {
@@ -171,7 +171,7 @@ namespace Educadev.Functions
 
                 if (string.IsNullOrWhiteSpace(message)) return;
 
-                await SlackHelper.SlackPost("chat.postMessage", plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = message,
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
@@ -225,7 +225,7 @@ namespace Educadev.Functions
                     Channel = plan.Channel,
                     Text = "Comme personne n'a voté pour le Lunch & Watch de ce midi, ce dernier a été annulé."
                 };
-                await SlackHelper.SlackPost("chat.postMessage", plan.Team, failMessage);
+                await SlackHelper.PostMessage(plan.Team, failMessage);
                 return;
             }
 
@@ -262,7 +262,7 @@ namespace Educadev.Functions
                 });
             }
 
-            await SlackHelper.SlackPost("chat.postMessage", plan.Team, message);
+            await SlackHelper.PostMessage(plan.Team, message);
 
             string FormatPosition(int index) =>
                 index == 0 ? ":first_place_medal: Première position" :

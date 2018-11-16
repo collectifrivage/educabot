@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -92,7 +91,7 @@ namespace Educadev.Functions
             var response = new SlackErrorsResponse();
             var now = DateTime.Now;
             
-            if (!DateTime.TryParseExact(dsp.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal, out var date))
+            if (!Utils.TryParseDate(dsp.GetValue("date"), out var date))
                 response.AddError("date", "Le format de date n'est pas valide.");
             else if (date < now.Date)
                 response.AddError("date", "La date ne peut pas être dans le passé.");
@@ -161,7 +160,7 @@ namespace Educadev.Functions
 
             await proposals.AddAsync(proposal);
 
-            await SlackHelper.SlackPost("chat.postMessage", proposalPayload.Team.Id, new PostMessageRequest {
+            await SlackHelper.PostMessage(proposalPayload.Team.Id, new PostMessageRequest {
                 Text = $"<@{proposalPayload.User.Id}> vient de proposer un vidéo :",
                 Channel = proposalPayload.Channel.Id,
                 Attachments = new [] {
@@ -173,6 +172,8 @@ namespace Educadev.Functions
                     }
                 }
             });
+
+            await binder.RecordChannelActivity(proposalPayload.Team.Id, proposalPayload.Channel.Id);
         }
 
         private static async Task RecordPlan(IBinder binder, DialogSubmissionPayload planPayload)
@@ -216,7 +217,7 @@ namespace Educadev.Functions
                 CreatedBy = planPayload.User.Id,
                 Team = planPayload.Team.Id,
                 Channel = Utils.GetChannelFromPartitionKey(planPayload.State),
-                Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal).AddHours(12),
+                Date = Utils.ParseDate(planPayload.GetValue("date")).AddHours(12),
                 Owner = planPayload.GetValue("owner") ?? "",
                 Video = videoKey ?? ""
             };
@@ -234,7 +235,8 @@ namespace Educadev.Functions
                 Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
             };
 
-            await SlackHelper.SlackPost("chat.postMessage", planPayload.Team.Id, message);
+            await SlackHelper.PostMessage(planPayload.Team.Id, message);
+            await binder.RecordChannelActivity(planPayload.Team.Id, planPayload.Channel.Id);
         }
 
         private static async Task RecordVotes(IBinder binder, DialogSubmissionPayload payload)
@@ -267,7 +269,7 @@ namespace Educadev.Functions
                 Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
             };
 
-            await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, message);
+            await SlackHelper.PostEphemeral(payload.Team.Id, message);
         }
 
 
@@ -291,7 +293,7 @@ namespace Educadev.Functions
                             MessageHelpers.GetRemoveMessageAttachment()
                         }
                     };
-                    await SlackHelper.SlackPost("chat.postEphemeral", payload.Team.Id, message);
+                    await SlackHelper.PostEphemeral(payload.Team.Id, message);
                     
                     return await UpdatePlanMessage(binder, payload, plan, "");
                 }
@@ -325,7 +327,7 @@ namespace Educadev.Functions
                         Dialog = await DialogHelpers.GetVoteDialog(binder, payload.PartitionKey, action.Value, payload.User.Id)
                     };
 
-                    await SlackHelper.SlackPost("dialog.open", payload.Team.Id, dialogRequest);
+                    await SlackHelper.OpenDialog(payload.Team.Id, dialogRequest);
                 }
                 catch (NoAvailableVideosException)
                 {
@@ -352,7 +354,7 @@ namespace Educadev.Functions
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
                 };
 
-                await SlackHelper.SlackPost("chat.update", payload.Team.Id, message);
+                await SlackHelper.UpdateMessage(payload.Team.Id, message);
                 return Utils.Ok();
             }
             else
@@ -449,7 +451,7 @@ namespace Educadev.Functions
             // Notifier le owner si c'est pas lui qui supprime sa proposition
             if (proposal.ProposedBy != payload.User.Id)
             {
-                await SlackHelper.SlackPost("chat.postMessage", payload.Team.Id, new PostMessageRequest {
+                await SlackHelper.PostMessage(payload.Team.Id, new PostMessageRequest {
                     Channel = proposal.ProposedBy,
                     Text = $"<@{payload.User.Id}> vient de supprimer votre proposition de vidéo dans <#{payload.Channel.Id}>:",
                     Attachments = {await MessageHelpers.GetProposalAttachment(binder, proposal, allowActions: false)}
@@ -475,7 +477,7 @@ namespace Educadev.Functions
                     Dialog = await DialogHelpers.GetPlanDialog(binder, action.Value)
                 };
 
-                await SlackHelper.SlackPost("dialog.open", payload.Team.Id, dialogRequest);
+                await SlackHelper.OpenDialog(payload.Team.Id, dialogRequest);
             }
 
             // NOTE: Présentement toutes les dialog_actions suppriment le message original

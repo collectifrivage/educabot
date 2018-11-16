@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Educadev.Models.Tables;
 using Microsoft.Azure.WebJobs;
 using Microsoft.WindowsAzure.Storage.Table;
 
@@ -25,6 +26,12 @@ namespace Educadev.Helpers
         {
             var attr = new TableAttribute(tableName, partitionKey, rowKey);
             return await binder.BindAsync<T>(attr);
+        }
+
+        public static async Task RecordChannelActivity(this IBinder binder, string teamId, string channelId)
+        {
+            var channels = await binder.GetTable("channels");
+            await channels.ExecuteAsync(TableOperation.InsertOrReplace(new Channel(teamId, channelId)));
         }
 
         public static async Task<IList<T>> ExecuteQueryAsync<T>(

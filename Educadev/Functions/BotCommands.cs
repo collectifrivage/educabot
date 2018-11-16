@@ -31,7 +31,7 @@ namespace Educadev.Functions
                 Dialog = DialogHelpers.GetProposeDialog(defaultName: parameters["text"])
             };
 
-            await SlackHelper.SlackPost("dialog.open", parameters["team_id"], dialogRequest);
+            await SlackHelper.OpenDialog(parameters["team_id"], dialogRequest);
 
             return Utils.Ok();
         }
@@ -73,7 +73,7 @@ namespace Educadev.Functions
                 Dialog = await DialogHelpers.GetPlanDialog(binder, partitionKey, defaultDate: parameters["text"])
             };
 
-            await SlackHelper.SlackPost("dialog.open", parameters["team_id"], dialogRequest);
+            await SlackHelper.OpenDialog(parameters["team_id"], dialogRequest);
 
             return Utils.Ok();
         }

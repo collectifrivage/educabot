@@ -9,6 +9,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Web;
 using Educadev.Models.Slack;
+using Educadev.Models.Slack.Dialogs;
+using Educadev.Models.Slack.Messages;
 using Educadev.Models.Slack.Payloads;
 using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
@@ -40,7 +42,12 @@ namespace Educadev.Helpers
             return body;
         }
 
-        public static async Task SlackPost(string slackMethod, string teamId, object requestModel)
+        public static Task PostMessage(string teamId, PostMessageRequest request) => SlackPost("chat.postMessage", teamId, request);
+        public static Task PostEphemeral(string teamId, PostEphemeralRequest request) => SlackPost("chat.postEphemeral", teamId, request);
+        public static Task OpenDialog(string teamId, OpenDialogRequest request) => SlackPost("dialog.open", teamId, request);
+        public static Task UpdateMessage(string teamId, UpdateMessageRequest request) => SlackPost("chat.update", teamId, request);
+
+        private static async Task SlackPost(string slackMethod, string teamId, object requestModel)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, slackMethod);
 
