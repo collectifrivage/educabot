@@ -220,8 +220,8 @@ namespace Educadev.Functions
                 Team = planPayload.Team.Id,
                 Channel = Utils.GetChannelFromPartitionKey(planPayload.State),
                 Date = DateTime.ParseExact(planPayload.GetValue("date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal).AddHours(12),
-                Owner = planPayload.GetValue("owner"),
-                Video = videoKey
+                Owner = planPayload.GetValue("owner") ?? "",
+                Video = videoKey ?? ""
             };
 
             var result = await plans.ExecuteAsync(TableOperation.Insert(plan));
@@ -313,6 +313,14 @@ namespace Educadev.Functions
 
             if (action.Name == "vote")
             {
+                if (!string.IsNullOrWhiteSpace(plan.Video))
+                {
+                    return Utils.Ok(new SlackMessage {
+                        Text = "Le vidéo a déjà été sélectionné pour ce Lunch & Watch.",
+                        Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                    });
+                }
+
                 try
                 {
                     var dialogRequest = new OpenDialogRequest {

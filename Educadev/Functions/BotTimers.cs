@@ -220,6 +220,7 @@ namespace Educadev.Functions
                     new {video = x.Proposal2, score = 3},
                     new {video = x.Proposal3, score = 1}
                 })
+                .Where(x => !string.IsNullOrWhiteSpace(x.video))
                 .GroupBy(x => x.video)
                 .Select(g => new {video = g.Key, score = g.Sum(x => x.score), count = g.Count()})
                 .OrderByDescending(x => x.score)
@@ -247,18 +248,22 @@ namespace Educadev.Functions
 
             var message = new PostMessageRequest {
                 Channel = plan.Channel,
-                Text = ":trophy: Voici le résultat du vote pour le Lunch & Watch de ce midi :",
-                Attachments = (
-                    from item in results.Take(3).Select((result, index) => new {result, index})
-                    let prop = proposalsTable.Retrieve<Proposal>(plan.PartitionKey, item.result.video)
-                    select new MessageAttachment {
-                        Title = FormatPosition(item.index),
-                        Text = proposal.GetFormattedTitle(),
-                        Footer = $"{item.result.score} points, {item.result.count} votes",
-                        Color = GetColor(item.index)
-                    }
-                ).ToList()
+                Text = ":trophy: Voici le résultat du vote pour le Lunch & Watch de ce midi :"
             };
+
+            for (var i = 0; i < 3; i++)
+            {
+                if (results.Count <= i) break;
+                var result = results[i];
+                
+                var prop = await proposalsTable.Retrieve<Proposal>(plan.PartitionKey, result.video);
+                message.Attachments.Add(new MessageAttachment {
+                    Title = FormatPosition(i), 
+                    Text = prop.GetFormattedTitle(), 
+                    Footer = $"{Pluralize(result.score, "point")}, {Pluralize(result.count, "vote")}", 
+                    Color = GetColor(i)
+                });
+            }
 
             if (results.Count > 1 && results[0].score == results[1].score)
             {
@@ -279,6 +284,8 @@ namespace Educadev.Functions
                 index == 1 ? "#C0C0C0" :
                 index == 2 ? "#CD7F32" : null;
         }
+
+        private static string Pluralize(int n, string name) => $"{n} {name}{(n > 1 ? "s" : "")}";
 
         private static async Task<IList<Plan>> GetTodayPlansWithoutResponsible(CloudTable plansTable)
         {
