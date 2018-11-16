@@ -95,17 +95,20 @@ namespace Educadev.Helpers
                 Elements = new List<DialogElement> {
                     new SelectDialogElement("proposal1", "Premier choix") {
                         Options = choices,
-                        DefaultValue = vote?.Proposal1
+                        DefaultValue = vote?.Proposal1,
+                        Hint = "Ce vote vaut 5 points"
                     },
                     new SelectDialogElement("proposal2", "Deuxième choix") {
                         Options = choices,
                         Optional = true,
-                        DefaultValue = vote?.Proposal2
+                        DefaultValue = vote?.Proposal2,
+                        Hint = "Ce vote vaut 3 points"
                     },
                     new SelectDialogElement("proposal3", "Troisième choix") {
                         Options = choices,
                         Optional = true,
-                        DefaultValue = vote?.Proposal3
+                        DefaultValue = vote?.Proposal3,
+                        Hint = "Ce vote vaut 1 point"
                     }
                 }
             };

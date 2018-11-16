@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using Educadev.Helpers;
 using Educadev.Models.Slack.Messages;
@@ -135,7 +136,7 @@ namespace Educadev.Functions
 
         [FunctionName("PlanReminder")]
         public static async Task PlanReminder(
-            [TimerTrigger("0 15 9 * * 1-5")] TimerInfo timer, // 9:15AM monday-friday
+            [TimerTrigger("0 15 9 * * *")] TimerInfo timer, // 9:15AM daily
             [Table("plans")] CloudTable plansTable,
             IBinder binder)
         {
@@ -188,6 +189,80 @@ namespace Educadev.Functions
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
                 });
             }
+        }
+
+        [FunctionName("CloseVote")]
+        public static async Task CloseVote(
+            [TimerTrigger("0 15 11 * * *")] TimerInfo timer, // 11:15AM daily
+            [Table("plans")] CloudTable plansTable,
+            [Table("votes")] CloudTable votesTable,
+            [Table("proposals")] CloudTable proposalsTable)
+        {
+            var today = DateTime.Today;
+            var withoutVideo = TableQuery.GenerateFilterCondition("Video", "eq", "");
+            
+            var plans = await PlanHelpers.GetPlansForDate(plansTable, today, withoutVideo);
+            foreach (var plan in plans)
+            {
+                await CloseVote(plansTable, votesTable, proposalsTable, plan);
+            }
+        }
+
+        private static async Task CloseVote(CloudTable plansTable, CloudTable votesTable, CloudTable proposalsTable, Plan plan)
+        {
+            var votes = await votesTable.GetAllByPartition<Vote>(
+                Utils.GetPartitionKeyWithAddon(plan.PartitionKey, plan.RowKey));
+
+            var results = votes
+                .SelectMany(x => new[] {
+                    new {video = x.Proposal1, score = 5},
+                    new {video = x.Proposal2, score = 3},
+                    new {video = x.Proposal3, score = 1}
+                })
+                .GroupBy(x => x.video)
+                .Select(g => new {video = g.Key, score = g.Sum(x => x.score), count = g.Count()})
+                .OrderByDescending(x => x.score)
+                .ToList();
+
+            if (!results.Any())
+            {
+                // TODO: Voir comment on gère cette situation.
+                return;
+            }
+
+            plan.Video = results.First().video;
+            await plansTable.ExecuteAsync(TableOperation.Replace(plan));
+
+            var proposal = await proposalsTable.Retrieve<Proposal>(plan.PartitionKey, plan.Video);
+            proposal.PlannedIn = plan.RowKey;
+            await proposalsTable.ExecuteAsync(TableOperation.Replace(proposal));
+
+            var message = new PostMessageRequest {
+                Channel = plan.Channel,
+                Text = ":trophy: Voici le résultat du vote pour le Lunch & Watch de ce midi :",
+                Attachments = (
+                    from item in results.Take(3).Select((result, index) => new {result, index})
+                    let prop = proposalsTable.Retrieve<Proposal>(plan.PartitionKey, item.result.video)
+                    select new MessageAttachment {
+                        Title = FormatPosition(item.index),
+                        Text = proposal.GetFormattedTitle(),
+                        Footer = $"{item.result.score} points, {item.result.count} votes",
+                        Color = GetColor(item.index)
+                    }
+                ).ToList()
+            };
+
+            await SlackHelper.SlackPost("chat.postMessage", plan.Team, message);
+
+            string FormatPosition(int index) =>
+                index == 0 ? ":first_place_medal: Première position" :
+                index == 1 ? ":second_place_medal: Deuxième position" :
+                index == 2 ? ":third_place_medal: Troisième position" : null;
+
+            string GetColor(int index) =>
+                index == 0 ? "#FFD700" :
+                index == 1 ? "#C0C0C0" :
+                index == 2 ? "#CD7F32" : null;
         }
 
         private static async Task<IList<Plan>> GetTodayPlansWithoutResponsible(CloudTable plansTable)
