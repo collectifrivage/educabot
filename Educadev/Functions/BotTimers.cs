@@ -89,7 +89,8 @@ namespace Educadev.Functions
         public static async Task CompletePlans(
             [TimerTrigger("0 0 13 * * *")] TimerInfo timer, // 1:00PM daily
             [Table("plans")] CloudTable plansTable,
-            [Table("proposals")] CloudTable proposalsTable)
+            [Table("proposals")] CloudTable proposalsTable,
+            IBinder binder)
         {
             Utils.SetCulture();
 
@@ -115,6 +116,8 @@ namespace Educadev.Functions
                         }
                     }
                 });
+
+                await binder.RecordChannelActivity(proposal.Team, proposal.Channel);
             }
         }
 
