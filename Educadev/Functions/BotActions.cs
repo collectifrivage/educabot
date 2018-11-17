@@ -14,7 +14,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Educadev.Functions
@@ -24,12 +23,11 @@ namespace Educadev.Functions
         [FunctionName("SlackAction")]
         public static async Task<IActionResult> DispatchAction(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/action-endpoint")] HttpRequest req, 
-            IBinder binder,
-            ILogger log)
+            IBinder binder, ExecutionContext context)
         {
             Utils.SetCulture();
 
-            var body = await SlackHelper.ReadSlackRequest(req);
+            var body = await SlackHelper.ReadSlackRequest(req, context);
             var parameters = SlackHelper.ParseBody(body);
             var payload = SlackHelper.DecodePayload(parameters["payload"]);
 
@@ -159,7 +157,7 @@ namespace Educadev.Functions
 
             await proposals.AddAsync(proposal);
 
-            await SlackHelper.PostMessage(proposalPayload.Team.Id, new PostMessageRequest {
+            await SlackHelper.PostMessage(binder, proposalPayload.Team.Id, new PostMessageRequest {
                 Text = $"<@{proposalPayload.User.Id}> vient de proposer un vidéo :",
                 Channel = proposalPayload.Channel.Id,
                 Attachments = new [] {
@@ -186,7 +184,7 @@ namespace Educadev.Functions
                 var proposal = await proposals.Retrieve<Proposal>(planPayload.State, videoKey);
                 if (proposal == null)
                 {
-                    await MessageHelpers.PostErrorMessage(planPayload, "Vidéo non trouvé");
+                    await MessageHelpers.PostErrorMessage(binder, planPayload, "Vidéo non trouvé");
                     return;
                 }
 
@@ -195,7 +193,7 @@ namespace Educadev.Functions
                     var otherPlan = await plans.Retrieve<Plan>(planPayload.State, proposal.PlannedIn);
                     if (otherPlan != null)
                     {
-                        await MessageHelpers.PostErrorMessage(planPayload, $"Ce vidéo est déjà planifié pour le {otherPlan.Date:dddd d MMMM}.");
+                        await MessageHelpers.PostErrorMessage(binder, planPayload, $"Ce vidéo est déjà planifié pour le {otherPlan.Date:dddd d MMMM}.");
                         return;
                     }
                 }
@@ -205,7 +203,7 @@ namespace Educadev.Functions
                 var proposalResult = await proposals.ExecuteAsync(TableOperation.Replace(proposal));
                 if (proposalResult.IsError())
                 {
-                    await MessageHelpers.PostErrorMessage(planPayload);
+                    await MessageHelpers.PostErrorMessage(binder, planPayload);
                     return;
                 }
             }
@@ -224,7 +222,7 @@ namespace Educadev.Functions
             var result = await plans.ExecuteAsync(TableOperation.Insert(plan));
             if (result.IsError())
             {
-                await MessageHelpers.PostErrorMessage(planPayload);
+                await MessageHelpers.PostErrorMessage(binder, planPayload);
                 return;
             }
 
@@ -234,7 +232,7 @@ namespace Educadev.Functions
                 Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
             };
 
-            await SlackHelper.PostMessage(planPayload.Team.Id, message);
+            await SlackHelper.PostMessage(binder, planPayload.Team.Id, message);
             await binder.RecordChannelActivity(planPayload.Team.Id, planPayload.Channel.Id);
         }
 
@@ -253,7 +251,7 @@ namespace Educadev.Functions
             var result = await votesTable.ExecuteAsync(TableOperation.InsertOrReplace(vote));
             if (result.IsError())
             {
-                await MessageHelpers.PostErrorMessage(payload);
+                await MessageHelpers.PostErrorMessage(binder, payload);
                 return;
             }
 
@@ -268,7 +266,7 @@ namespace Educadev.Functions
                 Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
             };
 
-            await SlackHelper.PostEphemeral(payload.Team.Id, message);
+            await SlackHelper.PostEphemeral(binder, payload.Team.Id, message);
         }
 
 
@@ -300,7 +298,7 @@ namespace Educadev.Functions
                             MessageHelpers.GetRemoveMessageAttachment()
                         }
                     };
-                    await SlackHelper.PostEphemeral(payload.Team.Id, message);
+                    await SlackHelper.PostEphemeral(binder, payload.Team.Id, message);
                     
                     return await UpdatePlanMessage(binder, payload, plan, "");
                 }
@@ -310,14 +308,14 @@ namespace Educadev.Functions
                 var result = await plans.ExecuteAsync(TableOperation.Replace(plan));
                 if (result.IsError())
                 {
-                    await MessageHelpers.PostErrorMessage(payload);
+                    await MessageHelpers.PostErrorMessage(binder, payload);
                     return await UpdatePlanMessage(binder, payload, plan, "");
                 }
 
                 if (plan.Date.Date == DateTime.Today && DateTime.Now.TimeOfDay >= TimeSpan.Parse("11:30"))
                 {
                     var message = await MessageHelpers.GetPrepareVideoReminder(binder, plan);
-                    await SlackHelper.PostMessage(plan.Team, message);
+                    await SlackHelper.PostMessage(binder, plan.Team, message);
                 }
 
                 return await UpdatePlanMessage(binder, payload, plan, "Merci!");
@@ -340,7 +338,7 @@ namespace Educadev.Functions
                         Dialog = await DialogHelpers.GetVoteDialog(binder, payload.PartitionKey, action.Value, payload.User.Id)
                     };
 
-                    await SlackHelper.OpenDialog(payload.Team.Id, dialogRequest);
+                    await SlackHelper.OpenDialog(binder, payload.Team.Id, dialogRequest);
                 }
                 catch (NoAvailableVideosException)
                 {
@@ -367,7 +365,7 @@ namespace Educadev.Functions
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
                 };
 
-                await SlackHelper.UpdateMessage(payload.Team.Id, message);
+                await SlackHelper.UpdateMessage(binder, payload.Team.Id, message);
                 return Utils.Ok();
             }
             else
@@ -468,14 +466,14 @@ namespace Educadev.Functions
                 var result = await proposals.ExecuteAsync(TableOperation.Delete(proposal));
                 if (result.IsError())
                 {
-                    await MessageHelpers.PostErrorMessage(payload);
+                    await MessageHelpers.PostErrorMessage(binder, payload);
                     return Utils.Ok();
                 }
 
                 // Notifier le owner si c'est pas lui qui supprime sa proposition
                 if (proposal.ProposedBy != payload.User.Id)
                 {
-                    await SlackHelper.PostMessage(payload.Team.Id, new PostMessageRequest {
+                    await SlackHelper.PostMessage(binder, payload.Team.Id, new PostMessageRequest {
                         Channel = proposal.ProposedBy,
                         Text = $"<@{payload.User.Id}> vient de supprimer votre proposition de vidéo dans <#{payload.Channel.Id}>:",
                         Attachments = {await MessageHelpers.GetProposalAttachment(binder, proposal, allowActions: false)}
@@ -502,7 +500,7 @@ namespace Educadev.Functions
                     Dialog = await DialogHelpers.GetPlanDialog(binder, action.Value)
                 };
 
-                await SlackHelper.OpenDialog(payload.Team.Id, dialogRequest);
+                await SlackHelper.OpenDialog(binder, payload.Team.Id, dialogRequest);
             }
 
             // NOTE: Présentement toutes les dialog_actions suppriment le message original

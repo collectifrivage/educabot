@@ -155,7 +155,7 @@ namespace Educadev.Helpers
             };
         }
 
-        public static async Task PostErrorMessage(Payload payload, string messageText = "Oups! Il y a eu un problème. Ré-essayez ?")
+        public static async Task PostErrorMessage(IBinder binder, Payload payload, string messageText = "Oups! Il y a eu un problème. Ré-essayez ?")
         {
             var message = new PostEphemeralRequest {
                 User = payload.User.Id,
@@ -164,7 +164,7 @@ namespace Educadev.Helpers
                 Attachments = {GetRemoveMessageAttachment()}
             };
 
-            await SlackHelper.PostEphemeral(payload.Team.Id, message);
+            await SlackHelper.PostEphemeral(binder, payload.Team.Id, message);
         }
 
         public static async Task<PostMessageRequest> GetPrepareVideoReminder(IBinder binder, Plan plan)

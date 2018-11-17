@@ -24,7 +24,7 @@ namespace Educadev.Functions
 
             foreach (var plan in plans)
             {
-                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(binder, plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "<!channel> Rappel: Le Lunch & Watch de ce midi a besoin d'un responsable!",
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
@@ -44,7 +44,7 @@ namespace Educadev.Functions
 
             foreach (var plan in plans)
             {
-                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(binder, plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "<!channel> *Dernier rappel*: Le Lunch & Watch de ce midi a besoin d'un responsable! Si personne ne se manifeste, l'événement sera annulé.",
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
@@ -78,7 +78,7 @@ namespace Educadev.Functions
                 var result = await plansTable.ExecuteAsync(TableOperation.Delete(plan));
                 if (result.IsError()) continue;
 
-                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(binder, plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = "Le Lunch & Watch de ce midi a été annulé car aucun responsable ne s'est manifesté."
                 });
@@ -97,7 +97,7 @@ namespace Educadev.Functions
             foreach (var plan in plans)
             {
                 var message = await MessageHelpers.GetPrepareVideoReminder(binder, plan);
-                await SlackHelper.PostMessage(plan.Team, message);
+                await SlackHelper.PostMessage(binder, plan.Team, message);
             }
         }
 
@@ -119,7 +119,7 @@ namespace Educadev.Functions
                 proposal.Complete = true;
                 await proposalsTable.ExecuteAsync(TableOperation.Replace(proposal));
 
-                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(binder, plan.Team, new PostMessageRequest {
                     Channel = plan.Owner,
                     Text = $"Avez-vous terminé l'écoute du vidéo _{proposal.Name}_?\nSi vous choisissez Non, alors le vidéo sera automatiquement re-proposé pour le continuer plus tard.",
                     Attachments = {
@@ -190,7 +190,7 @@ namespace Educadev.Functions
 
                 if (string.IsNullOrWhiteSpace(message)) return;
 
-                await SlackHelper.PostMessage(plan.Team, new PostMessageRequest {
+                await SlackHelper.PostMessage(binder, plan.Team, new PostMessageRequest {
                     Channel = plan.Channel,
                     Text = message,
                     Attachments = {await MessageHelpers.GetPlanAttachment(binder, plan)}
@@ -203,7 +203,8 @@ namespace Educadev.Functions
             [TimerTrigger("0 15 11 * * *")] TimerInfo timer, // 11:15AM daily
             [Table("plans")] CloudTable plansTable,
             [Table("votes")] CloudTable votesTable,
-            [Table("proposals")] CloudTable proposalsTable)
+            [Table("proposals")] CloudTable proposalsTable,
+            IBinder binder)
         {
             Utils.SetCulture();
 
@@ -213,11 +214,11 @@ namespace Educadev.Functions
             var plans = await PlanHelpers.GetPlansForDate(plansTable, today, withoutVideo);
             foreach (var plan in plans)
             {
-                await CloseVote(plansTable, votesTable, proposalsTable, plan);
+                await CloseVote(binder, plansTable, votesTable, proposalsTable, plan);
             }
         }
 
-        private static async Task CloseVote(CloudTable plansTable, CloudTable votesTable, CloudTable proposalsTable, Plan plan)
+        private static async Task CloseVote(IBinder binder, CloudTable plansTable, CloudTable votesTable, CloudTable proposalsTable, Plan plan)
         {
             var votes = await votesTable.GetAllByPartition<Vote>(
                 Utils.GetPartitionKeyWithAddon(plan.PartitionKey, plan.RowKey));
@@ -244,7 +245,7 @@ namespace Educadev.Functions
                     Channel = plan.Channel,
                     Text = "Comme personne n'a voté pour le Lunch & Watch de ce midi, ce dernier a été annulé."
                 };
-                await SlackHelper.PostMessage(plan.Team, failMessage);
+                await SlackHelper.PostMessage(binder, plan.Team, failMessage);
                 return;
             }
 
@@ -281,7 +282,7 @@ namespace Educadev.Functions
                 });
             }
 
-            await SlackHelper.PostMessage(plan.Team, message);
+            await SlackHelper.PostMessage(binder, plan.Team, message);
 
             string FormatPosition(int index) =>
                 index == 0 ? ":first_place_medal: Première position" :

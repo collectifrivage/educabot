@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Educadev.Functions
@@ -19,11 +18,11 @@ namespace Educadev.Functions
         [FunctionName("SlackCommandPropose")]
         public static async Task<IActionResult> OnPropose(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/propose")] HttpRequest req,
-            ILogger log)
+            IBinder binder, ExecutionContext context)
         {
             Utils.SetCulture();
 
-            var body = await SlackHelper.ReadSlackRequest(req);
+            var body = await SlackHelper.ReadSlackRequest(req, context);
             var parameters = SlackHelper.ParseBody(body);
 
             var dialogRequest = new OpenDialogRequest {
@@ -31,7 +30,7 @@ namespace Educadev.Functions
                 Dialog = DialogHelpers.GetProposeDialog(defaultName: parameters["text"])
             };
 
-            await SlackHelper.OpenDialog(parameters["team_id"], dialogRequest);
+            await SlackHelper.OpenDialog(binder, parameters["team_id"], dialogRequest);
 
             return Utils.Ok();
         }
@@ -40,11 +39,11 @@ namespace Educadev.Functions
         public static async Task<IActionResult> OnList(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/list")] HttpRequest req,
             [Table("proposals")] CloudTable proposalsTable,
-            ILogger log, IBinder binder)
+            IBinder binder, ExecutionContext context)
         {
             Utils.SetCulture();
 
-            var body = await SlackHelper.ReadSlackRequest(req);
+            var body = await SlackHelper.ReadSlackRequest(req, context);
             var parameters = SlackHelper.ParseBody(body);
 
             var team = parameters["team_id"];
@@ -60,11 +59,11 @@ namespace Educadev.Functions
         public static async Task<IActionResult> OnPlan(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/plan")] HttpRequest req,
             [Table("proposals")] CloudTable proposalsTable,
-            ILogger log, IBinder binder)
+            IBinder binder, ExecutionContext context)
         {
             Utils.SetCulture();
 
-            var body = await SlackHelper.ReadSlackRequest(req);
+            var body = await SlackHelper.ReadSlackRequest(req, context);
             var parameters = SlackHelper.ParseBody(body);
             var partitionKey = Utils.GetPartitionKey(parameters["team_id"], parameters["channel_id"]);
 
@@ -73,7 +72,7 @@ namespace Educadev.Functions
                 Dialog = await DialogHelpers.GetPlanDialog(binder, partitionKey, defaultDate: parameters["text"])
             };
 
-            await SlackHelper.OpenDialog(parameters["team_id"], dialogRequest);
+            await SlackHelper.OpenDialog(binder, parameters["team_id"], dialogRequest);
 
             return Utils.Ok();
         }
@@ -82,11 +81,11 @@ namespace Educadev.Functions
         public static async Task<IActionResult> OnNext(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "slack/commands/next")] HttpRequest req,
             [Table("plans")] CloudTable plansTable,
-            ILogger log, IBinder binder)
+            IBinder binder, ExecutionContext context)
         {
             Utils.SetCulture();
 
-            var body = await SlackHelper.ReadSlackRequest(req);
+            var body = await SlackHelper.ReadSlackRequest(req, context);
             var parameters = SlackHelper.ParseBody(body);
             var partitionKey = Utils.GetPartitionKey(parameters["team_id"], parameters["channel_id"]);
 
