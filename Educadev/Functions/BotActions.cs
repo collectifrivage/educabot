@@ -16,7 +16,6 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Table;
-using PostEphemeralRequest = Educadev.Models.Slack.Messages.PostEphemeralRequest;
 
 namespace Educadev.Functions
 {
