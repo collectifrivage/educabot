@@ -262,7 +262,7 @@ namespace Educabot.Functions
             var message = new PostEphemeralRequest {
                 User = payload.User.Id,
                 Channel = payload.Channel.Id,
-                Text = $"Merci! Vos votes pour le plan du {plan.Date:d MMMM} ont bien été reçus.",
+                Text = $"Merci! Vos votes pour le vidéo du {plan.Date:d MMMM} ont bien été reçus.",
                 Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
             };
 
