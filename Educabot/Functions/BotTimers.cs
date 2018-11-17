@@ -12,6 +12,15 @@ namespace Educabot.Functions
 {
     public static class BotTimers
     {
+        [FunctionName("KeepAlive")]
+        public static async Task KeepAlive(
+            [TimerTrigger("0 */5 * * * *")] TimerInfo timer // Every 5 minutes
+        )
+        {
+            // No-op
+            // This is to try and keep the app "warm" on Azure
+        }
+
         [FunctionName("PlanResponsibleReminder")]
         public static async Task PlanResponsibleSecondReminder(
             [TimerTrigger("0 0 11 * * *")] TimerInfo timer, // 11AM daily
