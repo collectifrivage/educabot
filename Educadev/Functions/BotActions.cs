@@ -307,6 +307,12 @@ namespace Educadev.Functions
                     return await UpdatePlanMessage(binder, payload, plan, "");
                 }
 
+                if (plan.Date.Date == DateTime.Today && DateTime.Now.TimeOfDay >= TimeSpan.Parse("11:30"))
+                {
+                    var message = await MessageHelpers.GetPrepareVideoReminder(binder, plan);
+                    await SlackHelper.PostMessage(plan.Team, message);
+                }
+
                 return await UpdatePlanMessage(binder, payload, plan, "Merci!");
             }
 

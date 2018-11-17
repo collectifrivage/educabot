@@ -88,7 +88,7 @@ namespace Educadev.Functions
         public static async Task PrepareVideoReminder(
             [TimerTrigger("0 30 11 * * *")] TimerInfo timer, //11:30 daily
             [Table("plans")] CloudTable plansTable,
-            [Table("proposals")] CloudTable proposalsTable)
+            IBinder binder)
         {
             Utils.SetCulture();
 
@@ -96,47 +96,7 @@ namespace Educadev.Functions
 
             foreach (var plan in plans)
             {
-                var proposal = await proposalsTable.Retrieve<Proposal>(plan.PartitionKey, plan.Video);
-
-                var attachment = new MessageAttachment {
-                    Fields = {
-                        new AttachmentField {
-                            Title = "Proposé par",
-                            Value = $"<@{proposal.ProposedBy}>",
-                            Short = true
-                        },
-                        new AttachmentField {
-                            Title = "Proposé dans",
-                            Value = $"<#{proposal.Channel}>",
-                            Short = true
-                        },
-                        new AttachmentField {
-                            Title = "Nom du vidéo",
-                            Value = proposal.Name + (proposal.Part > 1 ? $" [{proposal.Part}e partie]" : ""),
-                            Short = true
-                        },
-                        new AttachmentField {
-                            Title = "Emplacement",
-                            Value = proposal.Url,
-                            Short = true
-                        }
-                    }
-                };
-
-                if (!string.IsNullOrWhiteSpace(proposal.Notes))
-                {
-                    attachment.Fields.Add(new AttachmentField {
-                        Title = "Notes", 
-                        Value = proposal.Notes
-                    });
-                }
-
-                var message = new PostMessageRequest {
-                    Channel = plan.Owner,
-                    Text = "Rappel: Vous êtes *responsable* du vidéo de ce midi. Tout doit être prêt pour démarrer à 12:10!",
-                    Attachments = {attachment}
-                };
-
+                var message = await MessageHelpers.GetPrepareVideoReminder(binder, plan);
                 await SlackHelper.PostMessage(plan.Team, message);
             }
         }

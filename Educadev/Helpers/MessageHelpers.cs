@@ -40,7 +40,7 @@ namespace Educadev.Helpers
         public static async Task<MessageAttachment> GetPlanAttachment(IBinder binder, Plan plan)
         {
             Proposal proposal = null;
-            if (!string.IsNullOrWhiteSpace(plan.Video))
+            if (!String.IsNullOrWhiteSpace(plan.Video))
             {
                 var proposals = await binder.GetTable("proposals");
                 proposal = await proposals.Retrieve<Proposal>(plan.PartitionKey, plan.Video);
@@ -52,7 +52,7 @@ namespace Educadev.Helpers
                 Fields = new List<AttachmentField> {
                     new AttachmentField {
                         Title = "Responsable",
-                        Value = string.IsNullOrWhiteSpace(plan.Owner) ? "À déterminer" : $"<@{plan.Owner}>",
+                        Value = String.IsNullOrWhiteSpace(plan.Owner) ? "À déterminer" : $"<@{plan.Owner}>",
                         Short = true
                     },
                     new AttachmentField {
@@ -64,7 +64,7 @@ namespace Educadev.Helpers
                 CallbackId = "plan_action"
             };
 
-            if (string.IsNullOrWhiteSpace(plan.Owner))
+            if (String.IsNullOrWhiteSpace(plan.Owner))
             {
                 result.Actions.Add(
                     new MessageAction {
@@ -82,7 +82,7 @@ namespace Educadev.Helpers
                 );
             }
 
-            if (string.IsNullOrWhiteSpace(plan.Video) && plan.Date <= DateTime.Now.AddDays(7))
+            if (String.IsNullOrWhiteSpace(plan.Video) && plan.Date <= DateTime.Now.AddDays(7))
             {
                 result.Actions.Add(
                     new MessageAction {
@@ -110,7 +110,7 @@ namespace Educadev.Helpers
             if (allowActions)
             {
                 Plan plan = null;
-                if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
+                if (!String.IsNullOrWhiteSpace(proposal.PlannedIn))
                     plan = await binder.GetTableRow<Plan>("plans", proposal.PartitionKey, proposal.PlannedIn);
 
                 if (plan == null)
@@ -165,6 +165,51 @@ namespace Educadev.Helpers
             };
 
             await SlackHelper.PostEphemeral(payload.Team.Id, message);
+        }
+
+        public static async Task<PostMessageRequest> GetPrepareVideoReminder(IBinder binder, Plan plan)
+        {
+            var proposal = await binder.GetTableRow<Proposal>("proposals", plan.PartitionKey, plan.Video);
+
+            var attachment = new MessageAttachment {
+                Fields = {
+                    new AttachmentField {
+                        Title = "Proposé par",
+                        Value = $"<@{proposal.ProposedBy}>",
+                        Short = true
+                    },
+                    new AttachmentField {
+                        Title = "Proposé dans",
+                        Value = $"<#{proposal.Channel}>",
+                        Short = true
+                    },
+                    new AttachmentField {
+                        Title = "Nom du vidéo",
+                        Value = proposal.Name + (proposal.Part > 1 ? $" [{proposal.Part}e partie]" : ""),
+                        Short = true
+                    },
+                    new AttachmentField {
+                        Title = "Emplacement",
+                        Value = proposal.Url,
+                        Short = true
+                    }
+                }
+            };
+
+            if (!String.IsNullOrWhiteSpace(proposal.Notes))
+            {
+                attachment.Fields.Add(new AttachmentField {
+                    Title = "Notes",
+                    Value = proposal.Notes
+                });
+            }
+
+            var message = new PostMessageRequest {
+                Channel = plan.Owner,
+                Text = "Rappel: Vous êtes *responsable* du vidéo de ce midi. Tout doit être prêt pour démarrer à 12:10!",
+                Attachments = {attachment}
+            };
+            return message;
         }
     }
 }
