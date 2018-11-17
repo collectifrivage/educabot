@@ -20,7 +20,7 @@ namespace Educadev.Models.Slack.Messages
         public string Text { get; set; }
 
         [JsonProperty("fields")]
-        public List<AttachmentField> Fields { get; set; }
+        public List<AttachmentField> Fields { get; set; } = new List<AttachmentField>();
 
         [JsonProperty("author_name")]
         public string AuthorName { get; set; }
