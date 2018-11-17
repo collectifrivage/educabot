@@ -281,6 +281,14 @@ namespace Educadev.Functions
             var action = payload.Actions.First();
             var plan = await plans.Retrieve<Plan>(payload.PartitionKey, action.Value);
 
+            if (plan == null)
+            {
+                return Utils.Ok(new SlackMessage {
+                    Text = "Oups! Ce Lunch & Watch ne semble plus exister.",
+                    Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                });
+            }
+
             if (action.Name == "volunteer")
             {
                 if (!string.IsNullOrWhiteSpace(plan.Owner))
@@ -393,6 +401,14 @@ namespace Educadev.Functions
             {
                 var proposalIdentifier = action.Value.Split('/');
                 var proposal = await proposals.Retrieve<Proposal>(proposalIdentifier[0], proposalIdentifier[1]);
+                
+                if (proposal == null)
+                {
+                    return Utils.Ok(new SlackMessage {
+                        Text = "Oups! Ce vidéo ne semble plus exister.",
+                        Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                    });
+                }
 
                 if (action.Name == "incomplete")
                 {
@@ -433,40 +449,44 @@ namespace Educadev.Functions
 
         private static async Task<IActionResult> DeleteProposal(IBinder binder, InteractiveMessagePayload payload, Proposal proposal)
         {
-            // Bloquer la suppression d'une proposition plannifiée
-            if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
+            var proposals = await binder.GetTable("proposals");
+
+            if (proposal != null)
             {
-                var plan = await binder.GetTableRow<Plan>("plans", payload.PartitionKey, proposal.PlannedIn);
-                if (plan != null)
+                // Bloquer la suppression d'une proposition plannifiée
+                if (!string.IsNullOrWhiteSpace(proposal.PlannedIn))
                 {
-                    return Utils.Ok(new SlackMessage {
-                        Text = $"Ce vidéo est déjà planifié pour le {plan.Date:dddd d MMMM}.",
-                        Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                    var plan = await binder.GetTableRow<Plan>("plans", payload.PartitionKey, proposal.PlannedIn);
+                    if (plan != null)
+                    {
+                        return Utils.Ok(new SlackMessage {
+                            Text = $"Ce vidéo est déjà planifié pour le {plan.Date:dddd d MMMM}.",
+                            Attachments = {MessageHelpers.GetRemoveMessageAttachment()}
+                        });
+                    }
+                }
+
+                var result = await proposals.ExecuteAsync(TableOperation.Delete(proposal));
+                if (result.IsError())
+                {
+                    await MessageHelpers.PostErrorMessage(payload);
+                    return Utils.Ok();
+                }
+
+                // Notifier le owner si c'est pas lui qui supprime sa proposition
+                if (proposal.ProposedBy != payload.User.Id)
+                {
+                    await SlackHelper.PostMessage(payload.Team.Id, new PostMessageRequest {
+                        Channel = proposal.ProposedBy,
+                        Text = $"<@{payload.User.Id}> vient de supprimer votre proposition de vidéo dans <#{payload.Channel.Id}>:",
+                        Attachments = {await MessageHelpers.GetProposalAttachment(binder, proposal, allowActions: false)}
                     });
                 }
-            }
-            
-            var proposals = await binder.GetTable("proposals");
-            var result = await proposals.ExecuteAsync(TableOperation.Delete(proposal));
-            if (result.IsError())
-            {
-                await MessageHelpers.PostErrorMessage(payload);
-                return Utils.Ok();
-            }
-
-            // Notifier le owner si c'est pas lui qui supprime sa proposition
-            if (proposal.ProposedBy != payload.User.Id)
-            {
-                await SlackHelper.PostMessage(payload.Team.Id, new PostMessageRequest {
-                    Channel = proposal.ProposedBy,
-                    Text = $"<@{payload.User.Id}> vient de supprimer votre proposition de vidéo dans <#{payload.Channel.Id}>:",
-                    Attachments = {await MessageHelpers.GetProposalAttachment(binder, proposal, allowActions: false)}
-                });
             }
 
             // NOTE: Présentement la seule place qu'on peut supprimer une proposition c'est à partir de la liste de toutes les propositions.
             // Si ça change, va falloir ajouter plus de logique ici pour recréer le bon type de message.
-            var allProposals = await ProposalHelpers.GetActiveProposals(proposals, proposal.PartitionKey);
+            var allProposals = await ProposalHelpers.GetActiveProposals(proposals, payload.PartitionKey);
             var message = await MessageHelpers.GetListMessage(binder, allProposals, payload.Channel.Id);
             message.ReplaceOriginal = true;
             return Utils.Ok(message);
