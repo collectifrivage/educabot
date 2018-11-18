@@ -13,7 +13,7 @@ namespace Educabot.Functions
     public static class BotTimers
     {
         [FunctionName("KeepAlive")]
-        public static async Task KeepAlive(
+        public static void KeepAlive(
             [TimerTrigger("0 */5 * * * *")] TimerInfo timer // Every 5 minutes
         )
         {
