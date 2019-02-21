@@ -23,7 +23,7 @@ namespace Educabot.Functions
 
         [FunctionName("PlanResponsibleReminder")]
         public static async Task PlanResponsibleSecondReminder(
-            [TimerTrigger("0 0 11 * * *")] TimerInfo timer, // 11AM daily
+            [TimerTrigger("0 15 11 * * *")] TimerInfo timer, // 11:15AM daily
             [Table("plans")] CloudTable plansTable,
             IBinder binder)
         {
@@ -187,7 +187,7 @@ namespace Educabot.Functions
                 {
                     message = "Rappel: Il y a un Lunch & Watch ce midi!";
                     if (string.IsNullOrWhiteSpace(plan.Video))
-                        message += " Votez pour le vidéo si ce n'est pas déjà fait! Vous avez jusqu'à 11h15 pour choisir.";
+                        message += " Votez pour le vidéo si ce n'est pas déjà fait! Vous avez jusqu'à 11h pour choisir.";
                     if (string.IsNullOrWhiteSpace(plan.Owner))
                         message += "\n\nIl n'y a pas encore de responsable pour préparer le vidéo. Cliquez sur _Je m'en occupe_ pour vous porter volontaire!";
                 }
@@ -209,7 +209,7 @@ namespace Educabot.Functions
 
         [FunctionName("CloseVote")]
         public static async Task CloseVote(
-            [TimerTrigger("0 15 11 * * *")] TimerInfo timer, // 11:15AM daily
+            [TimerTrigger("0 0 11 * * *")] TimerInfo timer, // 11AM daily
             [Table("plans")] CloudTable plansTable,
             [Table("votes")] CloudTable votesTable,
             [Table("proposals")] CloudTable proposalsTable,

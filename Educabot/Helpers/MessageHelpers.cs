@@ -92,7 +92,7 @@ namespace Educabot.Helpers
                         Text = "Voter pour le vidéo"
                     });
 
-                result.Footer = $"Le vote se termine le {plan.Date:d MMMM} à 11h15.";
+                result.Footer = $"Le vote se termine le {plan.Date:d MMMM} à 11h.";
             }
 
             return result;
